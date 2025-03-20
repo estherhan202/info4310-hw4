@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NFL Suspension Analysis - Interactive Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+      body {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f8f8f8;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 30px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        border-top: 5px solid #013369;
+        overflow-x: auto; /* Add horizontal scrolling if needed */
+      }
+
+      h1 {
+        text-align: center;
+        color: #013369;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .subtitle {
+        text-align: center;
+        color: #4f5155;
+        font-style: italic;
+        margin-bottom: 30px;
+      }
+
+      .control-panel {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin-bottom: 30px;
+        padding: 15px;
+        background-color: #f0f0f0;
+        border-radius: 6px;
+        border: 1px solid #d8d8d8;
+      }
+
+      .control-panel select {
+        padding: 8px 12px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        background-color: white;
+        font-family: inherit;
+        font-size: 14px;
+        min-width: 140px;
+      }
+
+      .control-panel label {
+        font-weight: bold;
+        color: #013369;
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .grid-container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+      }
+
+      .chart-container {
+        background-color: white;
+        padding: 10px;
+        border: 1px solid #ddd;
+      }
+
+      .bar {
+        transition: fill 0.3s;
+      }
+
+      .tooltip {
+        position: absolute;
+        padding: 10px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        pointer-events: none;
+        font-size: 12px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>NFL Suspensions: Punishment Severity vs. Offense Type</h1>
+      <div class="subtitle">
+        Analyzing how different violations are penalized across the league
+      </div>
+
+      <div class="control-panel">
+        <!-- Interactive controls will go here -->
+      </div>
+
+      <div id="visualization"></div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
