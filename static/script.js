@@ -772,16 +772,6 @@ d3.select("body").on("click", function (event) {
     d3.select("#panel-connector").remove();
   }
 });
-
-// Helper functions should be defined in the same pattern:
-function updatePointDisplay(filteredData) {
-  // code
-}
-
-function showAggregatedTooltip(event, d, element) {
-  // code
-}
-
 // Match your selection pattern:
 // Update the selection state and visuals in a clear sequence
 function selectPoint(element, d) {
