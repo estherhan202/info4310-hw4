@@ -424,26 +424,23 @@ function createScatterplot(data) {
       d3.selectAll(".tooltip").remove();
     })
     .on("click", function (event, d) {
-      // Remove tooltips
-      d3.selectAll(".tooltip").remove();
-
-      // Remove existing detail panels
-      d3.select("#detail-panel").remove();
-      d3.select("#panel-connector").remove();
-
       // Show detail panel
       const xPos = x(d.subCategory) + x.bandwidth() / 2;
       const yPos = y(d.games);
       showDetailPanel(d, svg, xPos, yPos, width, height);
-
       event.stopPropagation();
     });
 
-  // Close detail panel when clicking elsewhere on the SVG
-  svg.on("click", function () {
-    d3.select("#detail-panel").remove();
-    d3.select("#panel-connector").remove();
-  });
+  // // Close detail panel when clicking elsewhere on the body
+  // d3.select("body").on("click", function (event) {
+  //   const target = event.target;
+  //   const detailPanelNode = d3.select("#detail-panel").node();
+  //   console.log("Detail Panel Node:", detailPanelNode); // Debugging line
+  //   if (detailPanelNode && !detailPanelNode.contains(target)) {
+  //     d3.select("#detail-panel").remove();
+  //     d3.select("#panel-connector").remove();
+  //   }
+  // });
 
   // Add a count label to points with multiple players
   svg
@@ -541,224 +538,214 @@ function createScatterplot(data) {
     .style("fill", nflColors.lightAccent);
 }
 
-// Function to show detail panel for a point when clicked
 function showDetailPanel(d, svg, xPos, yPos, width, height) {
+  d3.select("#detail-panel").remove();
+
   // NFL color palette
   const nflColors = {
-    primary: "#013369", // NFL navy blue
-    secondary: "#D50A0A", // NFL red
-    accent: "#FFB612", // NFL gold
-    lightAccent: "#4F5155", // NFL gray
-    background: "#FFFFFF", // Light background
-    text: "#111111", // Dark text
+    primary: "#013369",
+    secondary: "#D50A0A",
+    accent: "#FFB612",
+    lightAccent: "#4F5155",
+    background: "#FFFFFF",
   };
 
-  // Calculate panel position
-  // Place the panel in a sensible location based on the point's position
-  let panelX, panelY, connectorPath;
-  const panelWidth = 300;
-  const panelHeight = Math.min(350, 130 + d.players.length * 60);
+  // Determine panel position
+  const panelWidth = 350;
+  const panelHeight = Math.min(400, d.count * 80 + 100); // Scale with number of players but cap at 400px
 
-  // Panel on the right if point is on the left side
-  if (xPos < width / 2) {
-    panelX = xPos + 30;
-    connectorPath = `M${xPos},${yPos} L${panelX},${yPos + 20}`;
-  } else {
-    // Panel on the left if point is on the right side
-    panelX = xPos - panelWidth - 30;
-    connectorPath = `M${xPos},${yPos} L${panelX + panelWidth},${yPos + 20}`;
-  }
-
-  // Panel below if point is in the upper half
-  if (yPos < height / 2) {
-    panelY = yPos + 20;
-  } else {
-    // Panel above if point is in the lower half
-    panelY = yPos - panelHeight - 20;
-    // Update connector path
-    if (xPos < width / 2) {
-      connectorPath = `M${xPos},${yPos} L${panelX},${panelY + panelHeight}`;
-    } else {
-      connectorPath = `M${xPos},${yPos} L${panelX + panelWidth},${
-        panelY + panelHeight
-      }`;
+  let anchorX = xPos + 30;
+  if (anchorX + panelWidth > width) {
+    anchorX = xPos - panelWidth - 30;
+    if (anchorX < 10) {
+      anchorX = Math.max(10, (width - panelWidth) / 2);
     }
   }
 
-  // Create connector line from point to panel
-  svg
-    .append("path")
-    .attr("id", "panel-connector")
-    .attr("d", connectorPath)
-    .attr("stroke", nflColors.lightAccent)
-    .attr("stroke-width", 1.5)
-    .attr("stroke-dasharray", "4,3")
-    .attr("fill", "none");
+  let anchorY = yPos - panelHeight / 2;
+  anchorY = Math.max(10, Math.min(height - panelHeight - 10, anchorY));
 
-  // Create the detail panel
-  const detailPanel = svg
+  // Create a panel group
+  const panel = svg
     .append("g")
     .attr("id", "detail-panel")
-    .attr("transform", `translate(${panelX}, ${panelY})`);
+    .attr("transform", `translate(${anchorX}, ${anchorY})`)
+    .style("cursor", "default");
+
+  // Define clipping mask for scrollable content
+  const defs = svg.append("defs");
+  defs
+    .append("clipPath")
+    .attr("id", "panel-clip")
+    .append("rect")
+    .attr("width", panelWidth - 20)
+    .attr("height", panelHeight - 100); // Only allows scrolling within bounds
 
   // Panel background
-  detailPanel
+  panel
     .append("rect")
     .attr("width", panelWidth)
     .attr("height", panelHeight)
     .attr("fill", "white")
     .attr("stroke", nflColors.primary)
     .attr("stroke-width", 2)
-    .attr("rx", 8)
-    .attr("ry", 8);
+    .attr("rx", 8);
 
-  // Panel header background
-  detailPanel
+  // Panel header
+  const header = panel.append("g");
+
+  // Header background
+  header
     .append("rect")
     .attr("width", panelWidth)
     .attr("height", 50)
     .attr("fill", nflColors.primary)
-    .attr("rx", 8)
-    .attr("ry", 8)
-    .attr("y", 0);
+    .attr("rx", 8);
 
-  // Fix rounded corners on header
-  detailPanel
-    .append("rect")
-    .attr("width", panelWidth)
-    .attr("height", 25)
-    .attr("fill", nflColors.primary)
-    .attr("y", 25);
-
-  // Header title
-  detailPanel
+  // Title
+  header
     .append("text")
     .attr("x", 15)
-    .attr("y", 25)
+    .attr("y", 30)
+    .attr("fill", "white")
+    .style("font-size", "16px")
+    .style("font-weight", "bold")
+    .style("font-family", "Helvetica, Arial, sans-serif")
     .text(
       `${d.count} Player${d.count > 1 ? "s" : ""} - ${
         d.games === 40 ? "Indefinite" : d.games + " game"
       } Suspension`
-    )
-    .attr("fill", "white")
-    .attr("font-size", "14px")
-    .attr("font-weight", "bold");
+    );
 
-  // Violation type
-  detailPanel
+  // Subtitle
+  header
     .append("text")
     .attr("x", 15)
     .attr("y", 45)
-    .text(`Violation: ${d.subCategory}`)
     .attr("fill", nflColors.accent)
-    .attr("font-size", "12px");
+    .style("font-size", "14px")
+    .style("font-family", "Helvetica, Arial, sans-serif")
+    .text(`Violation: ${d.subCategory}`);
 
-  // Close button (X)
-  const closeBtn = detailPanel
+  // Create a scrollable container with a clip path
+  const scrollContainer = panel
     .append("g")
-    .attr("class", "close-btn")
-    .attr("transform", `translate(${panelWidth - 30}, 25)`)
-    .style("cursor", "pointer");
+    .attr("clip-path", "url(#panel-clip)")
+    .attr("transform", "translate(0, 50)");
 
-  closeBtn
-    .append("circle")
-    .attr("r", 12)
-    .attr("fill", "rgba(255, 255, 255, 0.2)");
-
-  closeBtn
-    .append("text")
-    .attr("text-anchor", "middle")
-    .attr("dy", "0.35em")
-    .attr("fill", "white")
-    .attr("font-size", "16px")
-    .attr("font-weight", "bold")
-    .text("×");
-
-  closeBtn.on("click", function (event) {
-    d3.select("#detail-panel").remove();
-    d3.select("#panel-connector").remove();
-    event.stopPropagation();
-  });
-
-  // Add player list
-  const playerList = detailPanel
+  const playerList = scrollContainer
     .append("g")
-    .attr("class", "player-list")
-    .attr("transform", "translate(0, 60)");
+    .attr("transform", "translate(10, 10)"); // Start at the right position
 
-  // Create a clipping path for the player list area
-  detailPanel
-    .append("defs")
-    .append("clipPath")
-    .attr("id", "player-list-clip")
-    .append("rect")
-    .attr("x", 0)
-    .attr("y", 0)
-    .attr("width", panelWidth)
-    .attr("height", panelHeight - 70);
-
-  // Apply the clipping path to the player list
-  playerList.attr("clip-path", "url(#player-list-clip)");
-
-  // Add each player
+  // Add each player detail
   d.players.forEach((player, i) => {
-    const playerGroup = playerList
+    const playerCard = playerList
       .append("g")
-      .attr("transform", `translate(10, ${i * 60})`)
-      .attr("class", "player-item");
+      .attr("transform", `translate(0, ${i * 80})`);
 
-    // Background for this player (alternating colors)
-    playerGroup
+    playerCard
       .append("rect")
-      .attr("x", 0)
-      .attr("y", 0)
       .attr("width", panelWidth - 20)
-      .attr("height", 55)
-      .attr("fill", i % 2 === 0 ? "#f8f8f8" : "#f0f0f0")
+      .attr("height", 75)
       .attr("rx", 4)
-      .attr("ry", 4);
+      .attr("fill", i % 2 === 0 ? "#f9f9f9" : "#f1f1f1");
 
-    // Player name
-    playerGroup
+    playerCard
       .append("text")
       .attr("x", 10)
       .attr("y", 20)
-      .text(player.name)
-      .attr("fill", nflColors.primary)
-      .attr("font-size", "14px")
-      .attr("font-weight", "bold");
+      .style("font-weight", "bold")
+      .style("font-size", "14px")
+      .style("font-family", "Helvetica, Arial, sans-serif")
+      .style("fill", nflColors.primary)
+      .text(player.name);
 
-    // Team and year
-    playerGroup
+    playerCard
       .append("text")
       .attr("x", 10)
-      .attr("y", 35)
-      .text(`Team: ${player.team} | Year: ${player.year}`)
-      .attr("fill", nflColors.lightAccent)
-      .attr("font-size", "12px");
+      .attr("y", 40)
+      .style("font-size", "12px")
+      .style("font-family", "Helvetica, Arial, sans-serif")
+      .style("fill", nflColors.lightAccent)
+      .text(`Team: ${player.team} | Year: ${player.year}`);
 
-    // Description (if available)
-    playerGroup
+    const description = player.description || "No additional details available";
+    const truncatedDesc =
+      description.length > 70
+        ? description.substring(0, 70) + "..."
+        : description;
+
+    playerCard
       .append("text")
       .attr("x", 10)
-      .attr("y", 50)
-      .text(player.description || "No additional details available")
-      .attr("fill", "#666")
-      .attr("font-size", "11px")
-      .attr("font-style", "italic");
+      .attr("y", 60)
+      .style("font-size", "12px")
+      .style("font-style", "italic")
+      .style("font-family", "Helvetica, Arial, sans-serif")
+      .style("fill", "#666")
+      .text(truncatedDesc);
   });
 
-  // If there are many players, add a scrollbar suggestion
-  if (d.players.length > 5) {
-    detailPanel
+  // Implement scrolling
+  let scrollTop = 0;
+  const contentHeight = d.players.length * 80;
+  const maxScroll = Math.max(0, contentHeight - (panelHeight - 70));
+
+  panel
+    .append("rect")
+    .attr("width", panelWidth)
+    .attr("height", panelHeight - 50)
+    .attr("fill", "transparent")
+    .style("cursor", "default")
+    .on("wheel", function (event) {
+      event.preventDefault();
+      scrollTop = Math.max(0, Math.min(scrollTop + event.deltaY, maxScroll));
+      playerList.attr("transform", `translate(10, ${-scrollTop})`);
+    });
+
+  // Add scroll indicators
+  if (contentHeight > panelHeight - 70) {
+    panel
       .append("text")
-      .attr("x", panelWidth - 90)
-      .attr("y", panelHeight - 10)
-      .text("More players above/below")
-      .attr("fill", nflColors.secondary)
-      .attr("font-size", "10px")
-      .attr("font-style", "italic");
+      .attr("x", panelWidth / 2)
+      .attr("y", panelHeight - 15)
+      .attr("text-anchor", "middle")
+      .style("font-size", "12px")
+      .style("font-family", "Helvetica, Arial, sans-serif")
+      .style("fill", nflColors.lightAccent)
+      .text("Scroll for more");
   }
+
+  // Close button logic
+  const closeButton = header
+    .append("g")
+    .attr("transform", `translate(${panelWidth - 30}, 15)`)
+    .style("cursor", "pointer")
+    .on("click", function (event) {
+      defs.remove();
+      d3.select("#detail-panel").remove();
+      event.stopPropagation();
+    });
+
+  closeButton
+    .append("circle")
+    .attr("r", 10)
+    .attr("fill", "white")
+    .attr("opacity", 0.3);
+
+  closeButton
+    .append("text")
+    .attr("text-anchor", "middle")
+    .attr("dy", ".3em")
+    .style("font-size", "14px")
+    .style("font-weight", "bold")
+    .attr("fill", "white")
+    .text("×");
+
+  // svg.on("click", function () {
+  //   d3.select("#detail-panel").remove();
+  //   defs.remove();
+  // });
 }
 
 // Your Yelp style:
@@ -767,7 +754,9 @@ d3.select("#element").style("display", "block").style("color", "#333");
 // For tooltip/detail panel closing:
 d3.select("body").on("click", function (event) {
   const target = event.target;
-  if (!d3.select("#detail-panel").node().contains(target)) {
+  const detailPanelNode = d3.select("#detail-panel").node();
+  console.log("Detail Panel Node:", detailPanelNode); // Debugging line
+  if (detailPanelNode && !detailPanelNode.contains(target)) {
     d3.select("#detail-panel").remove();
     d3.select("#panel-connector").remove();
   }
