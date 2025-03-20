@@ -1,220 +1,19 @@
+import { processData, setupControls } from "./helpers.js";
+
 // Load and process the data
-document.addEventListener("DOMContentLoaded", function () {
-  // Load the CSV file
-  d3.csv("NFL Suspensions Data.csv")
-    .then(function (rawData) {
-      // Process the data
-      const processedData = processData(rawData);
-
-      // Create scatterplot visualization
-      createScatterplot(processedData);
-
-      // Setup interactive controls
-      setupControls(processedData);
-    })
-    .catch(function (error) {
-      console.error("Error loading the data:", error);
-    });
-});
-
-// Process the raw data into the format needed for visualization
-function processData(rawData) {
-  // Clean and prepare the data
-  const cleanedData = rawData
-    .map((d) => {
-      // Convert "Indef." to a value just beyond the highest actual suspension
-      // The highest actual suspension in the dataset is 36 games
-      const games = d.games === "Indef." ? 40 : parseInt(d.games);
-
-      // Map category to our visualization categories
-      let category, subCategory;
-
-      if (d.category.includes("PEDs")) {
-        category = "Drug Violations";
-        subCategory = d.category.includes("repeated")
-          ? "PEDs, more than once"
-          : "PEDs";
-      } else if (d.category.includes("Substance abuse")) {
-        category = "Drug Violations";
-        subCategory = d.category.includes("repeated")
-          ? "Substance abuse, more than once"
-          : "Substance abuse";
-      } else if (d.category.includes("In-game violence")) {
-        category = "Conduct Violations";
-        subCategory = "In-game violence";
-      } else if (d.category.includes("Personal conduct")) {
-        category = "Conduct Violations";
-        subCategory = "Personal conduct";
-      } else {
-        // Handle any other categories
-        return null;
-      }
-
-      return {
-        name: d.name,
-        team: d.team,
-        games: games,
-        category: category,
-        subCategory: subCategory,
-        description: d.desc,
-        year: d.year,
-        source: d.source,
-      };
-    })
-    .filter((d) => d !== null); // Remove any rows that didn't match our categories
-
-  // Group data by category, subcategory, and games
-  const groupedData = d3.group(
-    cleanedData,
-    (d) => d.category,
-    (d) => d.subCategory,
-    (d) => d.games
-  );
-
-  // Convert to format for visualization
-  const result = [];
-
-  // For each category
-  for (const [category, subcategories] of groupedData.entries()) {
-    // For each subcategory
-    for (const [subCategory, gameGroups] of subcategories.entries()) {
-      // Calculate total for this subcategory
-      const subcategoryTotal = Array.from(gameGroups.values()).reduce(
-        (sum, arr) => sum + arr.length,
-        0
-      );
-
-      // For each game count
-      for (const [games, players] of gameGroups.entries()) {
-        result.push({
-          category: category,
-          subCategory: subCategory,
-          games: games,
-          count: players.length,
-          percentage: players.length / subcategoryTotal,
-          players: players, // Keep player details for tooltips
-        });
-      }
-    }
+const nflSuspensionsVisualization = async function () {
+  try {
+    const rawData = await d3.csv("NFL Suspensions Data.csv");
+    const processedData = processData(rawData);
+    createScatterplot(processedData);
+    setupControls(processedData);
+  } catch (error) {
+    console.error("Error in NFL suspensions visualization:", error);
   }
+};
 
-  return result;
-}
-
-// Set up interactive controls
-function setupControls(data) {
-  const controlPanel = d3.select(".control-panel");
-
-  // Year range filter
-  controlPanel.append("div").html(`
-            <label>Year Range: </label>
-            <select id="year-filter">
-                <option value="all">All Years</option>
-                <option value="2010-2014">2010-2014</option>
-                <option value="2000-2009">2000-2009</option>
-                <option value="1990-1999">1990-1999</option>
-                <option value="1980-1989">1980-1989</option>
-            </select>
-        `);
-
-  // Game length filter
-  controlPanel.append("div").html(`
-            <label>Suspension Length: </label>
-            <select id="length-filter">
-                <option value="all">All Lengths</option>
-                <option value="short">Short (1-4 games)</option>
-                <option value="medium">Medium (5-10 games)</option>
-                <option value="long">Long (10+ games)</option>
-            </select>
-        `);
-
-  // Extract all teams
-  const allTeams = new Set();
-  data.forEach((d) => {
-    d.players.forEach((player) => {
-      if (player.team) allTeams.add(player.team);
-    });
-  });
-
-  // Team filter
-  controlPanel.append("div").html(`
-            <label>Team: </label>
-            <select id="team-filter">
-                <option value="all">All Teams</option>
-                ${Array.from(allTeams)
-                  .sort()
-                  .map((team) => `<option value="${team}">${team}</option>`)
-                  .join("")}
-            </select>
-        `);
-
-  // Add event listeners for filters
-  d3.select("#year-filter").on("change", function () {
-    const yearRange = this.value;
-    const lengthFilter = d3.select("#length-filter").property("value");
-    const teamFilter = d3.select("#team-filter").property("value");
-    const filteredData = filterData(data, yearRange, lengthFilter, teamFilter);
-    createScatterplot(filteredData);
-  });
-
-  d3.select("#length-filter").on("change", function () {
-    const lengthFilter = this.value;
-    const yearRange = d3.select("#year-filter").property("value");
-    const teamFilter = d3.select("#team-filter").property("value");
-    const filteredData = filterData(data, yearRange, lengthFilter, teamFilter);
-    createScatterplot(filteredData);
-  });
-
-  d3.select("#team-filter").on("change", function () {
-    const teamFilter = this.value;
-    const yearRange = d3.select("#year-filter").property("value");
-    const lengthFilter = d3.select("#length-filter").property("value");
-    const filteredData = filterData(data, yearRange, lengthFilter, teamFilter);
-    createScatterplot(filteredData);
-  });
-}
-
-// Filter data based on user selection
-function filterData(data, yearRange, lengthFilter, teamFilter = "all") {
-  // Create a deep copy to avoid modifying original data
-  let filteredData = JSON.parse(JSON.stringify(data));
-
-  // Apply filters to the players array
-  filteredData.forEach((d) => {
-    if (yearRange !== "all") {
-      const [startYear, endYear] = yearRange.split("-").map(Number);
-      d.players = d.players.filter((player) => {
-        // If year is a string, try to parse it as a number
-        const playerYear = parseInt(player.year);
-        // Check if year is within range, handling NaN values
-        return (
-          !isNaN(playerYear) && playerYear >= startYear && playerYear <= endYear
-        );
-      });
-    }
-
-    // Apply team filter
-    if (teamFilter !== "all") {
-      d.players = d.players.filter((player) => player.team === teamFilter);
-    }
-  });
-
-  // Apply length filter
-  if (lengthFilter !== "all") {
-    if (lengthFilter === "short") {
-      filteredData = filteredData.filter((d) => d.games >= 1 && d.games <= 4);
-    } else if (lengthFilter === "medium") {
-      filteredData = filteredData.filter((d) => d.games >= 5 && d.games <= 10);
-    } else if (lengthFilter === "long") {
-      filteredData = filteredData.filter((d) => d.games > 10);
-    }
-  }
-
-  // Remove entries with no players after filtering
-  filteredData = filteredData.filter((d) => d.players.length > 0);
-
-  return filteredData;
-}
+// Immediately invoke the function
+nflSuspensionsVisualization();
 
 // Create the scatterplot visualization with NFL styling
 function createScatterplot(data) {
@@ -223,13 +22,17 @@ function createScatterplot(data) {
 
   // NFL color palette
   const nflColors = {
-    primary: "#013369", // NFL navy blue
-    secondary: "#D50A0A", // NFL red
-    accent: "#FFB612", // NFL gold
-    lightAccent: "#4F5155", // NFL gray
-    background: "#F5F5F5", // Light background
-    text: "#111111", // Dark text
+    primary: "#013369",
+    secondary: "#D50A0A",
+    accent: "#FFB612",
+    lightAccent: "#4F5155",
+    background: "#FFFFFF",
   };
+
+  // Fixed values in variables at the top:
+  const pointSize = 6;
+  const tooltipWidth = 300;
+  const tooltipHeight = 200;
 
   // Set dimensions with increased margins
   const margin = { top: 80, right: 200, bottom: 120, left: 90 };
@@ -268,18 +71,26 @@ function createScatterplot(data) {
     .style("fill", nflColors.primary)
     .text("NFL SUSPENSION SEVERITY BY OFFENSE TYPE");
 
-  // Add football field yard markers (subtle background lines)
-  for (let i = 0; i <= width; i += width / 10) {
-    svg
-      .append("line")
-      .attr("x1", i)
-      .attr("y1", 0)
-      .attr("x2", i)
-      .attr("y2", height)
-      .attr("stroke", "#DDDDDD")
-      .attr("stroke-width", 1)
-      .attr("stroke-dasharray", "3,3");
-  }
+  // Remove ALL lines in the SVG
+  svg.selectAll("line").remove();
+
+  // If the lines are paths instead of line elements
+  svg
+    .selectAll("path")
+    .filter(function () {
+      const style = window.getComputedStyle(this);
+      return style.strokeDasharray && style.strokeDasharray !== "none";
+    })
+    .remove();
+
+  // Remove the football yard markers if they exist
+  svg.selectAll("line[stroke-dasharray='3,3']").remove();
+
+  // Remove any grid lines with class
+  svg.selectAll(".grid-lines").remove();
+
+  // If there are any other specific grid lines, you can remove them too
+  svg.selectAll(".gridlines").remove();
 
   // Flatten data to get individual suspension records
   const flattenedData = [];
@@ -329,9 +140,8 @@ function createScatterplot(data) {
 
   // Set up y-scale with evenly spaced ticks
   const maxYValue = Math.ceil(maxNumericGames / 4) * 4;
+  // Create the y-scale with a domain that includes indefinite values properly
   const yDomain = [0, hasIndefinite ? 40 : maxYValue];
-
-  const y = d3.scaleLinear().domain(yDomain).range([height, 0]);
 
   // Define colors based on violation category with NFL colors
   const color = (d) =>
@@ -352,9 +162,9 @@ function createScatterplot(data) {
     .attr("dy", ".15em")
     .attr("transform", "rotate(-40)");
 
-  // Create evenly spaced y-axis ticks
+  // Create evenly spaced y-axis ticks with NO skips
   const yTickValues = [];
-  for (let i = 0; i <= maxNumericGames; i += 4) {
+  for (let i = 0; i <= maxNumericGames; i += 1) {
     yTickValues.push(i);
   }
 
@@ -363,22 +173,36 @@ function createScatterplot(data) {
     yTickValues.push(40); // Ensure "Indef." is at the top
   }
 
-  // Set the y-axis domain to cover 1 to 4
-  const yDomainDynamic = [1, Math.max(4, maxNumericGames)];
-  const yTickValuesDynamic = d3.range(1, Math.max(4, maxNumericGames) + 1);
+  // Find the highest actual numeric suspension length
+  const highestNumeric = d3.max(numericSuspensions, (d) => d.games);
 
-  // Create scales
-  const yDynamic = d3.scaleLinear().domain(yDomainDynamic).range([height, 0]);
+  // Create a cleaned up y-axis domain and ticks
+  // Show EVERY tick mark without skips
+  const cleanedTickValues = [];
+  for (let i = 0; i <= highestNumeric; i += 1) {
+    cleanedTickValues.push(i);
+  }
 
-  // Add y-axis with specified tick values
+  // Add the indefinite value as the final tick
+  if (hasIndefinite) {
+    cleanedTickValues.push(40);
+  }
+
+  // Create the y-scale with a domain that includes indefinite values properly
+  const y = d3
+    .scaleLinear()
+    .domain([0, hasIndefinite ? 40 : highestNumeric])
+    .range([height, 0]);
+
+  // Add y-axis with specified tick values and custom formatting
   svg
     .append("g")
     .attr("class", "y-axis")
     .call(
       d3
-        .axisLeft(yDynamic)
-        .tickValues(yTickValuesDynamic)
-        .tickFormat((d) => d) // No special formatting needed
+        .axisLeft(y)
+        .tickValues(cleanedTickValues)
+        .tickFormat((d) => (d === 40 ? "Indef." : d))
     )
     .selectAll("text")
     .style("font-family", "Helvetica, Arial, sans-serif")
@@ -420,6 +244,49 @@ function createScatterplot(data) {
     .style("fill", nflColors.primary)
     .text("LENGTH OF SUSPENSION (GAMES)");
 
+  // Comprehensive removal of ALL gridlines
+  // Place this after creating axes but before adding data points
+
+  // Remove any previously added grid containers
+  svg.selectAll(".grid-container").remove();
+
+  // Remove all grid lines by class
+  svg.selectAll(".x-grid-line, .y-grid-line, .grid-line").remove();
+
+  // Remove all lines that might be grid lines but don't have the specific classes
+  svg
+    .selectAll("line")
+    .filter(function () {
+      // Keep axis lines but remove everything else
+      const parent = this.parentNode;
+      return !(
+        parent.classList.contains("tick") ||
+        parent.classList.contains("x-axis") ||
+        parent.classList.contains("y-axis")
+      );
+    })
+    .remove();
+
+  // Add CSS to prevent any future grid lines from appearing
+  const styleElement = document.createElement("style");
+  styleElement.textContent = `
+    .grid-line, .x-grid-line, .y-grid-line { 
+      display: none !important; 
+    }
+  `;
+  document.head.appendChild(styleElement);
+
+  // If there are path-based grid lines
+  svg
+    .selectAll("path")
+    .filter(function () {
+      return (
+        this.getAttribute("class") &&
+        this.getAttribute("class").includes("grid")
+      );
+    })
+    .remove();
+
   // GROUP DATA POINTS BY SUB-CATEGORY AND GAMES (Y-AXIS VALUES)
   const aggregatedData = [];
 
@@ -457,63 +324,153 @@ function createScatterplot(data) {
     .selectAll(".point")
     .data(aggregatedData)
     .enter()
-    .append("ellipse") // Use ellipse for football shape
+    .append("ellipse")
     .attr("class", "point")
-    .attr("cx", (d) => x(d.subCategory) + x.bandwidth() / 2)
-    .attr("cy", (d) => y(d.games))
-    .attr("rx", 8) // Fixed horizontal radius for all points
-    .attr("ry", 5.6) // Fixed vertical radius for all points (0.7 ratio maintained)
-    .attr("fill", (d) => color(d))
+    .attr("cx", function (d) {
+      return x(d.subCategory) + x.bandwidth() / 2;
+    })
+    .attr("cy", function (d) {
+      return y(d.games);
+    })
+    .attr("rx", pointSize)
+    .attr("ry", pointSize * 0.7)
+    .attr("fill", function (d) {
+      return color(d);
+    })
     .attr("opacity", 0.8)
     .attr("stroke", "#333")
     .attr("stroke-width", 0.5)
-    .attr(
-      "transform",
-      (d) =>
-        `rotate(45, ${x(d.subCategory) + x.bandwidth() / 2}, ${y(d.games)})`
-    ) // Rotate to look like a football
-    .on("mouseover", function (event, d) {
-      // Only show tooltip preview if no persistent panel is open
-      if (!d3.select("#detail-panel").empty()) return;
-      showAggregatedTooltip(event, d, this);
+    .attr("transform", function (d) {
+      return (
+        "rotate(45, " +
+        (x(d.subCategory) + x.bandwidth() / 2) +
+        ", " +
+        y(d.games) +
+        ")"
+      );
     })
-    .on("mouseout", hideNFLTooltip)
-    .on("click", function (event, d) {
-      // First remove any existing detail panels
-      d3.select("#detail-panel").remove();
+    .on("mouseover", function (event, d) {
+      // Highlight the point
+      d3.select(this).attr("stroke", nflColors.accent).attr("stroke-width", 2);
 
-      // Get the coordinates to position the panel
+      // Create a simple tooltip
+      const tooltip = d3
+        .select("body")
+        .append("div")
+        .attr("class", "tooltip")
+        .style("position", "absolute")
+        .style("background", "white")
+        .style("border", "1px solid #ddd")
+        .style("border-radius", "5px")
+        .style("padding", "10px")
+        .style("box-shadow", "0 2px 10px rgba(0,0,0,0.1)")
+        .style("width", "250px")
+        .style("pointer-events", "none")
+        .style("z-index", "1000")
+        .style("opacity", 0);
+
+      // Add tooltip title
+      tooltip
+        .append("div")
+        .style("font-weight", "bold")
+        .style("font-size", "14px")
+        .style("margin-bottom", "5px")
+        .text(
+          d.games === 40
+            ? "Indefinite Suspension"
+            : d.games + " Game Suspension"
+        );
+
+      // Add violation type
+      tooltip
+        .append("div")
+        .style("font-size", "13px")
+        .style("margin-bottom", "8px")
+        .text("Violation: " + d.subCategory);
+
+      // Add player count
+      tooltip
+        .append("div")
+        .style("font-size", "13px")
+        .style("margin-bottom", "10px")
+        .text("Players affected: " + d.count);
+
+      // Add click instruction
+      tooltip
+        .append("div")
+        .style("color", "#D50A0A")
+        .style("font-size", "12px")
+        .style("font-weight", "bold")
+        .style("text-align", "center")
+        .style("padding", "3px")
+        .style("border", "1px dashed #FFB612")
+        .style("background", "#f8f8f8")
+        .style("margin-bottom", "8px")
+        .text("Click for detailed player information");
+
+      // Position tooltip
+      tooltip
+        .style("left", event.pageX + 15 + "px")
+        .style("top", event.pageY - 30 + "px");
+
+      // Fade in tooltip
+      tooltip.transition().duration(200).style("opacity", 1);
+    })
+    .on("mouseout", function () {
+      // Reset point style
+      d3.select(this).attr("stroke", "#333").attr("stroke-width", 0.5);
+
+      // Remove tooltip
+      d3.selectAll(".tooltip").remove();
+    })
+    .on("click", function (event, d) {
+      // Remove tooltips
+      d3.selectAll(".tooltip").remove();
+
+      // Remove existing detail panels
+      d3.select("#detail-panel").remove();
+      d3.select("#panel-connector").remove();
+
+      // Show detail panel
       const xPos = x(d.subCategory) + x.bandwidth() / 2;
       const yPos = y(d.games);
-
-      // Create a more persistent panel for the clicked point
       showDetailPanel(d, svg, xPos, yPos, width, height);
 
-      // Stop the event from propagating
       event.stopPropagation();
     });
 
   // Close detail panel when clicking elsewhere on the SVG
   svg.on("click", function () {
     d3.select("#detail-panel").remove();
+    d3.select("#panel-connector").remove();
   });
 
   // Add a count label to points with multiple players
   svg
     .selectAll(".count-label")
-    .data(aggregatedData.filter((d) => d.count > 1))
+    .data(
+      aggregatedData.filter(function (d) {
+        return d.count > 1;
+      })
+    )
     .enter()
     .append("text")
     .attr("class", "count-label")
-    .attr("x", (d) => x(d.subCategory) + x.bandwidth() / 2)
-    .attr("y", (d) => y(d.games) + 4)
+    .attr("x", function (d) {
+      return x(d.subCategory) + x.bandwidth() / 2;
+    })
+    .attr("y", function (d) {
+      return y(d.games) + 4;
+    })
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "middle")
     .style("font-size", "10px")
     .style("font-weight", "bold")
     .style("fill", "white")
     .style("pointer-events", "none")
-    .text((d) => d.count);
+    .text(function (d) {
+      return d.count;
+    });
 
   // Add NFL-themed legend
   const legend = svg
@@ -584,267 +541,68 @@ function createScatterplot(data) {
     .style("fill", nflColors.lightAccent);
 }
 
-// Function to show the aggregated tooltip with all player details
-function showAggregatedTooltip(event, d, element) {
-  // NFL color palette
-  const nflColors = {
-    primary: "#013369",
-    secondary: "#D50A0A",
-    accent: "#FFB612",
-    lightAccent: "#4F5155",
-    background: "#FFFFFF",
-  };
-
-  // Highlight the data point
-  d3.select(element)
-    .attr("rx", 8 * 1.2)
-    .attr("ry", 5.6 * 1.2)
-    .attr("stroke", nflColors.accent)
-    .attr("stroke-width", 2);
-
-  // Calculate position for tooltip to ensure it stays in viewport
-  // and doesn't obscure the data point
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  let tooltipX = event.pageX + 15;
-  let tooltipY = event.pageY - 100;
-
-  // If tooltip would go off the right edge, position to the left of cursor
-  if (tooltipX + 320 > viewportWidth) {
-    tooltipX = event.pageX - 320;
-  }
-
-  // If tooltip would go off the top, position below cursor
-  if (tooltipY < 10) {
-    tooltipY = event.pageY + 20;
-  }
-
-  // Create fancy NFL-styled tooltip with fixed dimensions
-  const tooltip = d3
-    .select("body")
-    .append("div")
-    .attr("class", "tooltip")
-    .style("opacity", 0)
-    .style("background-color", "white")
-    .style("border", `2px solid ${nflColors.primary}`)
-    .style("border-radius", "6px")
-    .style("padding", "12px")
-    .style("box-shadow", "0 4px 8px rgba(0,0,0,0.2)")
-    .style("font-family", "Helvetica, Arial, sans-serif")
-    .style("position", "absolute")
-    .style("pointer-events", "none")
-    .style("z-index", "1000")
-    .style("width", "300px") // Fixed width
-    .style("height", "200px") // Fixed height
-    .style("overflow-y", "auto"); // Enable scrolling
-
-  tooltip.transition().duration(200).style("opacity", 1);
-
-  // Create header for the aggregated tooltip
-  let tooltipContent = `
-    <div style="border-bottom: 2px solid ${
-      nflColors.primary
-    }; margin-bottom: 10px; padding-bottom: 5px; position: sticky; top: 0; background-color: white; z-index: 2;">
-      <span style="color: ${
-        nflColors.primary
-      }; font-weight: bold; font-size: 16px;">
-        ${d.count} Player${d.count > 1 ? "s" : ""} - ${
-    d.games === 40 ? "Indefinite" : d.games + " game"
-  } Suspension
-      </span>
-      <div style="font-size: 14px; margin-top: 5px;">Violation: ${
-        d.subCategory
-      }</div>
-      <div style="font-size: 12px; margin-top: 5px; color: ${
-        nflColors.secondary
-      }; text-align: center; font-weight: bold; border: 1px dashed ${
-    nflColors.accent
-  }; padding: 3px; background-color: #f8f8f8;">
-        Click on point for more details
-      </div>
-    </div>
-  `;
-
-  // Add a container for the scrollable content
-  tooltipContent += `<div style="max-height: calc(100% - 80px); overflow-y: auto;">`;
-
-  // Add details for each player in the aggregated point
-  // Show just a preview - first 2 players only for the hover
-  const previewPlayers = d.players.slice(0, 2);
-
-  previewPlayers.forEach((player, index) => {
-    let details = player.description
-      ? player.description
-      : "No additional details available";
-
-    // Truncate description even further for the preview
-    if (details.length > 50) {
-      details = details.substring(0, 50) + "...";
-    }
-
-    tooltipContent += `
-      <div style="margin-bottom: 10px; ${
-        index > 0 ? "border-top: 1px dotted #ddd; padding-top: 8px;" : ""
-      }">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-weight: bold; color: ${nflColors.primary};">${
-      player.name
-    }</span>
-          <span style="background-color: ${
-            nflColors.lightAccent
-          }; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${
-      player.team
-    }</span>
-        </div>
-        <div style="font-size: 12px; margin-top: 4px;"><span style="font-weight: bold">Year:</span> ${
-          player.year
-        }</div>
-        <div style="font-size: 12px; font-style: italic; color: #666; margin-top: 2px;">${details}</div>
-      </div>
-    `;
-  });
-
-  // Close the scrollable container
-  tooltipContent += `</div>`;
-
-  // Add a visual indicator if there are more players than shown in preview
-  if (d.players.length > 2) {
-    tooltipContent += `
-      <div style="position: sticky; bottom: 0; background-color: white; text-align: center; font-size: 12px; color: ${
-        nflColors.lightAccent
-      }; padding-top: 5px; border-top: 1px dotted #ddd;">
-        + ${d.count - 2} more player${
-      d.count - 2 > 1 ? "s" : ""
-    } (click for full details)
-      </div>
-    `;
-  }
-
-  tooltip
-    .html(tooltipContent)
-    .style("left", tooltipX + "px")
-    .style("top", tooltipY + "px");
-}
-
-function hideNFLTooltip() {
-  // For regular non-aggregated points
-  if (d3.select(this).datum().count === undefined) {
-    d3.select(this)
-      .attr("rx", 6)
-      .attr("ry", 4)
-      .attr("stroke", "#333")
-      .attr("stroke-width", 0.5);
-  } else {
-    // For aggregated points, reset to original scaled size
-    const d = d3.select(this).datum();
-    d3.select(this)
-      .attr("rx", 8)
-      .attr("ry", 5.6)
-      .attr("stroke", "#333")
-      .attr("stroke-width", 0.5);
-  }
-
-  d3.selectAll(".tooltip").remove();
-}
-
-// Function to show detailed panel when a point is clicked
+// Function to show detail panel for a point when clicked
 function showDetailPanel(d, svg, xPos, yPos, width, height) {
   // NFL color palette
   const nflColors = {
-    primary: "#013369",
-    secondary: "#D50A0A",
-    accent: "#FFB612",
-    lightAccent: "#4F5155",
-    background: "#FFFFFF",
+    primary: "#013369", // NFL navy blue
+    secondary: "#D50A0A", // NFL red
+    accent: "#FFB612", // NFL gold
+    lightAccent: "#4F5155", // NFL gray
+    background: "#FFFFFF", // Light background
+    text: "#111111", // Dark text
   };
 
-  // Determine panel position - try to keep it within the visualization area
-  // Position to the right of the point by default, but if too close to the right edge,
-  // position to the left
-  const panelWidth = 350;
-  const panelHeight = Math.min(400, d.count * 80 + 100); // Scale with number of players but cap at 400px
+  // Calculate panel position
+  // Place the panel in a sensible location based on the point's position
+  let panelX, panelY, connectorPath;
+  const panelWidth = 300;
+  const panelHeight = Math.min(350, 130 + d.players.length * 60);
 
-  // Improved positioning logic to ensure the panel is well-positioned
-  // Start by trying to position to the right of the point
-  let anchorX = xPos + 30;
+  // Panel on the right if point is on the left side
+  if (xPos < width / 2) {
+    panelX = xPos + 30;
+    connectorPath = `M${xPos},${yPos} L${panelX},${yPos + 20}`;
+  } else {
+    // Panel on the left if point is on the right side
+    panelX = xPos - panelWidth - 30;
+    connectorPath = `M${xPos},${yPos} L${panelX + panelWidth},${yPos + 20}`;
+  }
 
-  // Check if panel would go off the right edge and adjust
-  if (anchorX + panelWidth > width) {
-    // Try positioning to the left instead
-    anchorX = xPos - panelWidth - 30;
-
-    // If still off screen (left side), center it as best we can
-    if (anchorX < 10) {
-      anchorX = Math.max(10, (width - panelWidth) / 2);
+  // Panel below if point is in the upper half
+  if (yPos < height / 2) {
+    panelY = yPos + 20;
+  } else {
+    // Panel above if point is in the lower half
+    panelY = yPos - panelHeight - 20;
+    // Update connector path
+    if (xPos < width / 2) {
+      connectorPath = `M${xPos},${yPos} L${panelX},${panelY + panelHeight}`;
+    } else {
+      connectorPath = `M${xPos},${yPos} L${panelX + panelWidth},${
+        panelY + panelHeight
+      }`;
     }
   }
 
-  // Calculate vertical position - try to center on the point
-  let anchorY = yPos - panelHeight / 2;
+  // Create connector line from point to panel
+  svg
+    .append("path")
+    .attr("id", "panel-connector")
+    .attr("d", connectorPath)
+    .attr("stroke", nflColors.lightAccent)
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "4,3")
+    .attr("fill", "none");
 
-  // Make sure it doesn't go off the top
-  if (anchorY < 10) {
-    anchorY = 10;
-  }
-
-  // Make sure it doesn't go off the bottom
-  if (anchorY + panelHeight > height - 10) {
-    anchorY = height - panelHeight - 10;
-  }
-
-  // If still not fitting well, prioritize making it fully visible
-  anchorY = Math.max(10, Math.min(height - panelHeight - 10, anchorY));
-
-  // Create a panel group
-  const panel = svg
+  // Create the detail panel
+  const detailPanel = svg
     .append("g")
     .attr("id", "detail-panel")
-    .attr("transform", `translate(${anchorX}, ${anchorY})`)
-    .style("cursor", "default");
+    .attr("transform", `translate(${panelX}, ${panelY})`);
 
-  // Add a subtle drop shadow for the panel (SVG filter)
-  const defs = svg.append("defs");
-
-  // Define a drop shadow filter
-  const filter = defs
-    .append("filter")
-    .attr("id", "drop-shadow")
-    .attr("x", "-20%")
-    .attr("y", "-20%")
-    .attr("width", "140%")
-    .attr("height", "140%");
-
-  // Add the shadow components
-  filter
-    .append("feGaussianBlur")
-    .attr("in", "SourceAlpha")
-    .attr("stdDeviation", 3)
-    .attr("result", "blur");
-
-  filter
-    .append("feOffset")
-    .attr("in", "blur")
-    .attr("dx", 2)
-    .attr("dy", 2)
-    .attr("result", "offsetBlur");
-
-  const feComponentTransfer = filter
-    .append("feComponentTransfer")
-    .attr("in", "offsetBlur")
-    .attr("result", "offsetBlur");
-
-  feComponentTransfer
-    .append("feFuncA")
-    .attr("type", "linear")
-    .attr("slope", 0.5);
-
-  const feMerge = filter.append("feMerge");
-  feMerge.append("feMergeNode").attr("in", "offsetBlur");
-  feMerge.append("feMergeNode").attr("in", "SourceGraphic");
-
-  // Panel background with border and shadow
-  panel
+  // Panel background
+  detailPanel
     .append("rect")
     .attr("width", panelWidth)
     .attr("height", panelHeight)
@@ -852,244 +610,187 @@ function showDetailPanel(d, svg, xPos, yPos, width, height) {
     .attr("stroke", nflColors.primary)
     .attr("stroke-width", 2)
     .attr("rx", 8)
-    .style("filter", "url(#drop-shadow)");
+    .attr("ry", 8);
 
-  // Panel header
-  const header = panel.append("g");
-
-  // Header background
-  header
+  // Panel header background
+  detailPanel
     .append("rect")
     .attr("width", panelWidth)
     .attr("height", 50)
     .attr("fill", nflColors.primary)
     .attr("rx", 8)
-    .attr("ry", 0);
+    .attr("ry", 8)
+    .attr("y", 0);
 
-  // Fix the top corners to be rounded but bottom corners square
-  header
+  // Fix rounded corners on header
+  detailPanel
     .append("rect")
     .attr("width", panelWidth)
-    .attr("height", 30)
-    .attr("y", 25)
-    .attr("fill", nflColors.primary);
+    .attr("height", 25)
+    .attr("fill", nflColors.primary)
+    .attr("y", 25);
 
-  // Title
-  header
+  // Header title
+  detailPanel
     .append("text")
     .attr("x", 15)
-    .attr("y", 30)
-    .attr("fill", "white")
-    .style("font-size", "16px")
-    .style("font-weight", "bold")
-    .style("font-family", "Helvetica, Arial, sans-serif")
+    .attr("y", 25)
     .text(
       `${d.count} Player${d.count > 1 ? "s" : ""} - ${
         d.games === 40 ? "Indefinite" : d.games + " game"
       } Suspension`
-    );
+    )
+    .attr("fill", "white")
+    .attr("font-size", "14px")
+    .attr("font-weight", "bold");
 
-  // Subtitle
-  header
+  // Violation type
+  detailPanel
     .append("text")
     .attr("x", 15)
     .attr("y", 45)
+    .text(`Violation: ${d.subCategory}`)
     .attr("fill", nflColors.accent)
-    .style("font-size", "14px")
-    .style("font-family", "Helvetica, Arial, sans-serif")
-    .text(`Violation: ${d.subCategory}`);
+    .attr("font-size", "12px");
 
-  // Close button
-  const closeButton = header
+  // Close button (X)
+  const closeBtn = detailPanel
     .append("g")
-    .attr("transform", `translate(${panelWidth - 30}, 15)`)
-    .style("cursor", "pointer")
-    .on("click", function (event) {
-      // Remove the filter definition when closing
-      defs.remove();
-      d3.select("#detail-panel").remove();
-      event.stopPropagation(); // Prevent event from propagating to SVG
-    });
+    .attr("class", "close-btn")
+    .attr("transform", `translate(${panelWidth - 30}, 25)`)
+    .style("cursor", "pointer");
 
-  closeButton
+  closeBtn
     .append("circle")
-    .attr("r", 10)
-    .attr("fill", "white")
-    .attr("opacity", 0.3);
+    .attr("r", 12)
+    .attr("fill", "rgba(255, 255, 255, 0.2)");
 
-  closeButton
+  closeBtn
     .append("text")
     .attr("text-anchor", "middle")
-    .attr("dy", ".3em")
-    .style("font-size", "14px")
-    .style("font-weight", "bold")
+    .attr("dy", "0.35em")
     .attr("fill", "white")
+    .attr("font-size", "16px")
+    .attr("font-weight", "bold")
     .text("×");
 
-  // Create a scrollable content area within the panel
-  const contentG = panel.append("g").attr("transform", "translate(0, 50)");
-
-  // Generate a unique ID for this clip path to avoid conflicts
-  const clipId = `content-clip-${Date.now()}`;
-
-  // Define the clipPath for the content area
-  contentG
-    .append("clipPath")
-    .attr("id", clipId)
-    .append("rect")
-    .attr("width", panelWidth)
-    .attr("height", panelHeight - 50);
-
-  const content = contentG.append("g").attr("clip-path", `url(#${clipId})`);
-
-  // Create scrollable content with player details
-  const playerList = content.append("g");
-
-  // Add each player detail
-  d.players.forEach((player, i) => {
-    const playerCard = playerList
-      .append("g")
-      .attr("transform", `translate(10, ${i * 80})`);
-
-    // Player card background with alternating colors for better readability
-    playerCard
-      .append("rect")
-      .attr("width", panelWidth - 20)
-      .attr("height", 75)
-      .attr("rx", 4)
-      .attr("fill", i % 2 === 0 ? "#f9f9f9" : "#f1f1f1");
-
-    // Player name
-    playerCard
-      .append("text")
-      .attr("x", 10)
-      .attr("y", 20)
-      .style("font-weight", "bold")
-      .style("font-size", "14px")
-      .style("font-family", "Helvetica, Arial, sans-serif")
-      .style("fill", nflColors.primary)
-      .text(player.name);
-
-    // Team and year
-    playerCard
-      .append("text")
-      .attr("x", 10)
-      .attr("y", 40)
-      .style("font-size", "12px")
-      .style("font-family", "Helvetica, Arial, sans-serif")
-      .style("fill", nflColors.lightAccent)
-      .text(`Team: ${player.team} | Year: ${player.year}`);
-
-    // Description (truncate if too long)
-    const description = player.description || "No additional details available";
-    const truncatedDesc =
-      description.length > 70
-        ? description.substring(0, 70) + "..."
-        : description;
-
-    playerCard
-      .append("text")
-      .attr("x", 10)
-      .attr("y", 60)
-      .style("font-size", "12px")
-      .style("font-style", "italic")
-      .style("font-family", "Helvetica, Arial, sans-serif")
-      .style("fill", "#666")
-      .text(truncatedDesc);
-  });
-
-  // Add a transparent rect to capture mouse events and implement scrolling
-  const scrollArea = panel
-    .append("rect")
-    .attr("width", panelWidth)
-    .attr("height", panelHeight)
-    .attr("fill", "transparent")
-    .style("cursor", "default");
-
-  // Scrolling functionality - track mouse wheel events to scroll content
-  let contentHeight = d.players.length * 80;
-  let scrollTop = 0;
-  const maxScroll = Math.max(0, contentHeight - (panelHeight - 70));
-
-  scrollArea.on("wheel", function (event) {
-    // Prevent default scroll behavior
-    event.preventDefault();
-
-    // Update scroll position
-    scrollTop = Math.min(Math.max(0, scrollTop + event.deltaY), maxScroll);
-
-    // Update content position
-    playerList.attr("transform", `translate(10, ${-scrollTop})`);
-  });
-
-  // Add scroll indicators if content is scrollable
-  if (contentHeight > panelHeight - 70) {
-    // Add scroll indicator at the bottom of visible content
-    panel
-      .append("text")
-      .attr("x", panelWidth / 2)
-      .attr("y", panelHeight - 15)
-      .attr("text-anchor", "middle")
-      .style("font-size", "12px")
-      .style("font-family", "Helvetica, Arial, sans-serif")
-      .style("fill", nflColors.lightAccent)
-      .text("Scroll for more");
-
-    // Add a subtle shadow at the bottom to indicate more content
-    panel
-      .append("rect")
-      .attr("x", 0)
-      .attr("y", panelHeight - 30)
-      .attr("width", panelWidth)
-      .attr("height", 15)
-      .attr("fill", "white")
-      .attr("opacity", 0.3)
-      .attr("rx", 0);
-  }
-
-  // Add a visual indicator connecting the detail panel to the data point
-  // to make it clearer which point the panel is associated with
-  let connectorStartX, connectorStartY, connectorEndX, connectorEndY;
-
-  // Determine if panel is to the right or left of the point
-  if (anchorX > xPos) {
-    // Panel is to the right
-    connectorStartX = xPos + 8;
-    connectorEndX = anchorX;
-  } else {
-    // Panel is to the left
-    connectorStartX = xPos - 8;
-    connectorEndX = anchorX + panelWidth;
-  }
-
-  connectorStartY = yPos;
-  connectorEndY = anchorY + panelHeight / 2;
-
-  // Add the connector line
-  svg
-    .append("path")
-    .attr("id", "panel-connector")
-    .attr(
-      "d",
-      `M ${connectorStartX} ${connectorStartY} L ${connectorEndX} ${connectorEndY}`
-    )
-    .attr("stroke", nflColors.lightAccent)
-    .attr("stroke-width", 1.5)
-    .attr("stroke-dasharray", "3,3")
-    .attr("opacity", 0.6);
-
-  // Make sure the connector is removed when the panel is closed
-  closeButton.on("click", function (event) {
-    d3.select("#panel-connector").remove();
-    defs.remove(); // Remove filter definitions
+  closeBtn.on("click", function (event) {
     d3.select("#detail-panel").remove();
+    d3.select("#panel-connector").remove();
     event.stopPropagation();
   });
 
-  // Also remove connector when clicking elsewhere
-  svg.on("click", function () {
-    d3.select("#panel-connector").remove();
-    defs.remove(); // Remove filter definitions
-    d3.select("#detail-panel").remove();
+  // Add player list
+  const playerList = detailPanel
+    .append("g")
+    .attr("class", "player-list")
+    .attr("transform", "translate(0, 60)");
+
+  // Create a clipping path for the player list area
+  detailPanel
+    .append("defs")
+    .append("clipPath")
+    .attr("id", "player-list-clip")
+    .append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", panelWidth)
+    .attr("height", panelHeight - 70);
+
+  // Apply the clipping path to the player list
+  playerList.attr("clip-path", "url(#player-list-clip)");
+
+  // Add each player
+  d.players.forEach((player, i) => {
+    const playerGroup = playerList
+      .append("g")
+      .attr("transform", `translate(10, ${i * 60})`)
+      .attr("class", "player-item");
+
+    // Background for this player (alternating colors)
+    playerGroup
+      .append("rect")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("width", panelWidth - 20)
+      .attr("height", 55)
+      .attr("fill", i % 2 === 0 ? "#f8f8f8" : "#f0f0f0")
+      .attr("rx", 4)
+      .attr("ry", 4);
+
+    // Player name
+    playerGroup
+      .append("text")
+      .attr("x", 10)
+      .attr("y", 20)
+      .text(player.name)
+      .attr("fill", nflColors.primary)
+      .attr("font-size", "14px")
+      .attr("font-weight", "bold");
+
+    // Team and year
+    playerGroup
+      .append("text")
+      .attr("x", 10)
+      .attr("y", 35)
+      .text(`Team: ${player.team} | Year: ${player.year}`)
+      .attr("fill", nflColors.lightAccent)
+      .attr("font-size", "12px");
+
+    // Description (if available)
+    playerGroup
+      .append("text")
+      .attr("x", 10)
+      .attr("y", 50)
+      .text(player.description || "No additional details available")
+      .attr("fill", "#666")
+      .attr("font-size", "11px")
+      .attr("font-style", "italic");
   });
+
+  // If there are many players, add a scrollbar suggestion
+  if (d.players.length > 5) {
+    detailPanel
+      .append("text")
+      .attr("x", panelWidth - 90)
+      .attr("y", panelHeight - 10)
+      .text("More players above/below")
+      .attr("fill", nflColors.secondary)
+      .attr("font-size", "10px")
+      .attr("font-style", "italic");
+  }
+}
+
+// Your Yelp style:
+d3.select("#element").style("display", "block").style("color", "#333");
+
+// For tooltip/detail panel closing:
+d3.select("body").on("click", function (event) {
+  const target = event.target;
+  if (!d3.select("#detail-panel").node().contains(target)) {
+    d3.select("#detail-panel").remove();
+    d3.select("#panel-connector").remove();
+  }
+});
+
+// Helper functions should be defined in the same pattern:
+function updatePointDisplay(filteredData) {
+  // code
+}
+
+function showAggregatedTooltip(event, d, element) {
+  // code
+}
+
+// Match your selection pattern:
+// Update the selection state and visuals in a clear sequence
+function selectPoint(element, d) {
+  // First clear previous selections
+  d3.selectAll(".point").classed("selected", false);
+
+  // Then update new selection
+  d3.select(element).classed("selected", true);
+
+  // Update related UI elements
+  updateDetailPanel(d);
 }
