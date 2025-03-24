@@ -76,6 +76,14 @@
         margin-bottom: 10px;
       }
 
+      .preview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+
       .tooltip .close-btn {
         background: none;
         border: none;
@@ -91,6 +99,12 @@
         padding: 10px;
         margin-bottom: 10px;
         background-color: #f9f9f9;
+      }
+
+      .player-card a {
+        word-break: break-all;
+        display: inline-block;
+        max-width: 100%;
       }
 
       .player-card strong {
@@ -160,7 +174,6 @@
         originalData = cleanData(data);
         populateTeamDropdown(originalData);
         updateVis(originalData);
-        console.log(originalData);
       });
 
       function cleanData(data) {
@@ -197,6 +210,7 @@
               description: d.desc,
               category: category,
               subCategory: subCategory,
+              source: d.source,
             };
           })
           .filter((d) => d);
@@ -332,9 +346,11 @@
             .attr("cy", yPos)
             .attr("r", 7)
             .attr("fill", color)
-
             .on("mouseover", function (event) {
               d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2);
+
+              // Remove any existing hover tooltip
+              d3.selectAll(".hover-tooltip").remove();
 
               const matches = filtered.filter(
                 (item) =>
@@ -344,18 +360,19 @@
               d3
                 .select("body")
                 .append("div")
-                .attr("class", "tooltip")
+                .attr("class", "tooltip hover-tooltip")
                 .style("left", `${event.pageX + 10}px`)
                 .style("top", `${event.pageY - 30}px`).html(`
-      <div class="tooltip-header">${d.subCategory}</div>
-      <div><strong>Games:</strong> ${d.games}</div>
-      <div><strong>Players:</strong> ${matches.length}</div>
-    `);
+          <div class="preview-header">${d.subCategory}</div>
+          <div><strong>Games:</strong> ${d.games}</div>
+          <div><strong>Players:</strong> ${matches.length}</div>
+        `);
             })
             .on("mouseout", function () {
               d3.select(this).attr("stroke", null);
-              d3.selectAll(".tooltip").remove(); // remove hover tooltip
+              d3.selectAll(".hover-tooltip").remove();
             })
+
             .on("click", function (event) {
               showTooltip(event, d, filtered);
             });
@@ -372,29 +389,31 @@
         const tooltip = d3
           .select("body")
           .append("div")
-          .attr("class", "tooltip")
+          .attr("class", "tooltip click-tooltip")
           .style("left", `${event.pageX + 10}px`)
           .style("top", `${event.pageY - 30}px`);
 
         // Header with count
         tooltip.html(`
-    <div class="tooltip-header">
-      ${d.subCategory} (${d.games} game${d.games > 1 ? "s" : ""})
-      <button class="close-btn" id="close-tooltip">&times;</button>
-    </div>
-    <div style="margin-bottom: 10px;"><strong>Total players:</strong> ${
-      matches.length
-    }</div>
-  `);
+        <div class="tooltip-header">
+          ${d.subCategory} (${d.games} game${d.games > 1 ? "s" : ""})
+          <button class="close-btn" id="close-tooltip">&times;</button>
+        </div>
+        <div style="margin-bottom: 10px;"><strong>Total players:</strong> ${
+          matches.length
+        }</div>
+      `);
 
         // Add player cards
         matches.forEach((item) => {
+          console.log(item);
           tooltip.append("div").attr("class", "player-card").html(`
-      <strong>${item.name}</strong>
-      <div><em>Team:</em> ${item.team}</div>
-      <div><em>Year:</em> ${item.year}</div>
-      <div><em>Description:</em> ${item.description}</div>
-    `);
+          <strong>${item.name}</strong>
+          <div><em>Team:</em> ${item.team}</div>
+          <div><em>Year:</em> ${item.year}</div>
+          <div><em>Description:</em> ${item.description}</div>
+          <div><em>Source:</em> <a href="${item.source}" target="_blank">${item.source}</a></div>
+        `);
         });
 
         d3.select("#close-tooltip").on("click", () => tooltip.remove());
