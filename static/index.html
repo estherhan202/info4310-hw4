@@ -264,6 +264,25 @@
 
         svg.append("g").call(d3.axisLeft(y));
 
+        // Y-axis label
+        svg
+          .append("text")
+          .attr("transform", `rotate(-90)`)
+          .attr("x", -height / 2)
+          .attr("y", -50)
+          .attr("text-anchor", "middle")
+          .attr("font-size", "14px")
+          .text("Number of Games Suspended");
+
+        // X-axis label
+        svg
+          .append("text")
+          .attr("x", width / 2)
+          .attr("y", height + 90)
+          .attr("text-anchor", "middle")
+          .attr("font-size", "14px")
+          .text("Violation Categories");
+
         // Step 1: Group by (subCategory, games)
         const groupMap = new Map();
         filtered.forEach((d) => {
