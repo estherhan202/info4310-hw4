@@ -2,6 +2,274 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <title>NFL Suspensions Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #f0f0f0;
+      }
+
+      #container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+      }
+
+      h1 {
+        text-align: center;
+        color: #013369;
+        font-size: 24px;
+        margin-bottom: 0;
+      }
+
+      .subtitle {
+        text-align: center;
+        font-style: italic;
+        color: #4f5155;
+        margin-bottom: 20px;
+      }
+
+      .control-panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+
+      .control-panel label {
+        font-weight: bold;
+        margin-right: 5px;
+      }
+
+      .control-panel select {
+        padding: 5px;
+        font-size: 14px;
+      }
+
+      .tooltip {
+        position: absolute;
+        pointer-events: none;
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 12px;
+        padding: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <h1>NFL Suspensions: Punishment Severity vs. Offense Type</h1>
+      <div class="subtitle">
+        Analyzing how different violations are penalized across the league
+      </div>
+
+      <div class="control-panel" id="filters">
+        <div>
+          <label for="year-filter">Year Range:</label>
+          <select id="year-filter">
+            <option value="all">All Years</option>
+            <option value="2010-2014">2010-2014</option>
+            <option value="2000-2009">2000-2009</option>
+            <option value="1990-1999">1990-1999</option>
+            <option value="1980-1989">1980-1989</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="length-filter">Suspension Length:</label>
+          <select id="length-filter">
+            <option value="all">All Lengths</option>
+            <option value="short">Short (1-4 games)</option>
+            <option value="medium">Medium (5-10 games)</option>
+            <option value="long">Long (10+ games)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="team-filter">Team:</label>
+          <select id="team-filter">
+            <option value="all">All Teams</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="visualization"></div>
+    </div>
+
+    <script>
+      const width = 900;
+      const height = 600;
+      const margin = { top: 60, right: 40, bottom: 100, left: 70 };
+
+      const svg = d3
+        .select("#visualization")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      let originalData;
+
+      // Load and process CSV
+      d3.csv("NFL Suspensions Data.csv").then((data) => {
+        originalData = cleanData(data);
+        populateTeamDropdown(originalData);
+        updateVis(originalData);
+      });
+
+      function cleanData(data) {
+        return data
+          .map((d) => {
+            const games = d.games === "Indef." ? 40 : +d.games;
+            let category, subCategory;
+
+            if (d.category.includes("PEDs")) {
+              category = "Drug Violations";
+              subCategory = d.category.includes("repeated")
+                ? "PEDs, more than once"
+                : "PEDs";
+            } else if (d.category.includes("Substance abuse")) {
+              category = "Drug Violations";
+              subCategory = d.category.includes("repeated")
+                ? "Substance abuse, more than once"
+                : "Substance abuse";
+            } else if (d.category.includes("In-game violence")) {
+              category = "Conduct Violations";
+              subCategory = "In-game violence";
+            } else if (d.category.includes("Personal conduct")) {
+              category = "Conduct Violations";
+              subCategory = "Personal conduct";
+            } else {
+              return null;
+            }
+
+            return {
+              name: d.name,
+              team: d.team,
+              games: games,
+              year: +d.year,
+              description: d.desc,
+              category: category,
+              subCategory: subCategory,
+            };
+          })
+          .filter((d) => d);
+      }
+
+      function populateTeamDropdown(data) {
+        const teams = Array.from(new Set(data.map((d) => d.team))).sort();
+        const teamSelect = d3.select("#team-filter");
+        teams.forEach((team) => {
+          teamSelect.append("option").attr("value", team).text(team);
+        });
+      }
+
+      function applyFilters(data) {
+        const yearVal = d3.select("#year-filter").property("value");
+        const lengthVal = d3.select("#length-filter").property("value");
+        const teamVal = d3.select("#team-filter").property("value");
+
+        return data.filter((d) => {
+          let pass = true;
+
+          if (yearVal !== "all") {
+            const [start, end] = yearVal.split("-").map(Number);
+            pass = pass && d.year >= start && d.year <= end;
+          }
+
+          if (lengthVal !== "all") {
+            if (lengthVal === "short") pass = pass && d.games <= 4;
+            if (lengthVal === "medium")
+              pass = pass && d.games >= 5 && d.games <= 10;
+            if (lengthVal === "long") pass = pass && d.games > 10;
+          }
+
+          if (teamVal !== "all") {
+            pass = pass && d.team === teamVal;
+          }
+
+          return pass;
+        });
+      }
+
+      function updateVis(data) {
+        svg.selectAll("*").remove();
+
+        const filtered = applyFilters(data);
+
+        const x = d3
+          .scaleBand()
+          .domain([...new Set(filtered.map((d) => d.subCategory))])
+          .range([0, width])
+          .padding(0.3);
+
+        const y = d3
+          .scaleLinear()
+          .domain([0, d3.max(filtered, (d) => d.games)])
+          .range([height, 0]);
+
+        svg
+          .append("g")
+          .attr("transform", `translate(0,${height})`)
+          .call(d3.axisBottom(x))
+          .selectAll("text")
+          .attr("transform", "rotate(-40)")
+          .style("text-anchor", "end");
+
+        svg.append("g").call(d3.axisLeft(y));
+
+        svg
+          .selectAll("circle")
+          .data(filtered)
+          .enter()
+          .append("circle")
+          .attr("cx", (d) => x(d.subCategory) + x.bandwidth() / 2)
+          .attr("cy", (d) => y(d.games))
+          .attr("r", 5)
+          .attr("fill", (d) =>
+            d.category === "Drug Violations" ? "#D50A0A" : "#013369"
+          )
+          .on("mouseover", function (event, d) {
+            d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2);
+            showTooltip(event, d);
+          })
+          .on("mouseout", function () {
+            d3.select(this).attr("stroke", null);
+            d3.selectAll(".tooltip").remove();
+          });
+      }
+
+      function showTooltip(event, d) {
+        d3.select("body")
+          .append("div")
+          .attr("class", "tooltip")
+          .style("left", event.pageX + 10 + "px")
+          .style("top", event.pageY - 30 + "px")
+          .html(
+            `<strong>${d.name}</strong><br>${d.team}, ${d.year}<br>${d.games} game(s)<br>${d.subCategory}`
+          );
+      }
+
+      // Event listeners
+      d3.selectAll("select").on("change", () => updateVis(originalData));
+    </script>
+  </body>
+</html>
+<!-- 
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NFL Suspension Analysis - Interactive Visualization</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -105,4 +373,4 @@
       <div id="visualization"></div>
     </div>
   </body>
-</html>
+</html> -->
