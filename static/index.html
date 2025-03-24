@@ -55,13 +55,48 @@
 
       .tooltip {
         position: absolute;
-        pointer-events: none;
+        pointer-events: auto;
         background: white;
         border: 1px solid #ccc;
-        border-radius: 4px;
-        font-size: 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        padding: 15px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        width: 320px;
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 10;
+      }
+
+      .tooltip-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+
+      .tooltip .close-btn {
+        background: none;
+        border: none;
+        font-size: 18px;
+        font-weight: bold;
+        color: #d00;
+        cursor: pointer;
+      }
+
+      .player-card {
+        border: 1px solid #ddd;
+        border-radius: 6px;
         padding: 10px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 10px;
+        background-color: #f9f9f9;
+      }
+
+      .player-card strong {
+        display: block;
+        color: #013369;
+        font-size: 16px;
       }
     </style>
   </head>
@@ -125,6 +160,7 @@
         originalData = cleanData(data);
         populateTeamDropdown(originalData);
         updateVis(originalData);
+        console.log(originalData);
       });
 
       function cleanData(data) {
@@ -241,23 +277,50 @@
           )
           .on("mouseover", function (event, d) {
             d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2);
-            showTooltip(event, d);
           })
           .on("mouseout", function () {
             d3.select(this).attr("stroke", null);
-            d3.selectAll(".tooltip").remove();
+          })
+          .on("click", function (event, d) {
+            showTooltip(event, d, filtered);
           });
       }
 
-      function showTooltip(event, d) {
-        d3.select("body")
+      function showTooltip(event, d, data) {
+        d3.selectAll(".tooltip").remove();
+
+        // Get all players with same subCategory and game count
+        const matches = data.filter(
+          (item) => item.subCategory === d.subCategory && item.games === d.games
+        );
+
+        const tooltip = d3
+          .select("body")
           .append("div")
           .attr("class", "tooltip")
-          .style("left", event.pageX + 10 + "px")
-          .style("top", event.pageY - 30 + "px")
-          .html(
-            `<strong>${d.name}</strong><br>${d.team}, ${d.year}<br>${d.games} game(s)<br>${d.subCategory}`
-          );
+          .style("left", `${event.pageX + 10}px`)
+          .style("top", `${event.pageY - 30}px`);
+
+        // Header with close button
+        tooltip.html(`
+    <div class="tooltip-header">
+      ${d.subCategory} (${d.games} game${d.games > 1 ? "s" : ""})
+      <button class="close-btn" id="close-tooltip">&times;</button>
+    </div>
+  `);
+
+        // Add each player as a card
+        matches.forEach((item) => {
+          tooltip.append("div").attr("class", "player-card").html(`
+        <strong>${item.name}</strong>
+        <div><em>Team:</em> ${item.team}</div>
+        <div><em>Year:</em> ${item.year}</div>
+        <div><em>Description:</em> ${item.description}</div>
+      `);
+        });
+
+        // X button to close the tooltip
+        d3.select("#close-tooltip").on("click", () => tooltip.remove());
       }
 
       // Event listeners
