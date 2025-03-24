@@ -264,32 +264,88 @@
 
         svg.append("g").call(d3.axisLeft(y));
 
-        svg
-          .selectAll("circle")
-          .data(filtered)
-          .enter()
-          .append("circle")
-          .attr("cx", (d) => x(d.subCategory) + x.bandwidth() / 2)
-          .attr("cy", (d) => y(d.games))
-          .attr("r", 5)
-          .attr("fill", (d) =>
-            d.category === "Drug Violations" ? "#D50A0A" : "#013369"
-          )
-          .on("mouseover", function (event, d) {
-            d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2);
-          })
-          .on("mouseout", function () {
-            d3.select(this).attr("stroke", null);
-          })
-          .on("click", function (event, d) {
-            showTooltip(event, d, filtered);
-          });
+        // Step 1: Group by (subCategory, games)
+        const groupMap = new Map();
+        filtered.forEach((d) => {
+          const key = `${d.subCategory}|${d.games}`;
+          if (!groupMap.has(key)) groupMap.set(key, []);
+          groupMap.get(key).push(d);
+        });
+
+        // Step 2: Find max count per subCategory
+        const maxCountsBySubCategory = {};
+        groupMap.forEach((group, key) => {
+          const [subCategory] = key.split("|");
+          if (
+            !maxCountsBySubCategory[subCategory] ||
+            group.length > maxCountsBySubCategory[subCategory]
+          ) {
+            maxCountsBySubCategory[subCategory] = group.length;
+          }
+        });
+
+        // Step 3: Draw one circle per group with hue based on count (relative to subCategory)
+        groupMap.forEach((group, key) => {
+          const [subCategory, gamesStr] = key.split("|");
+          const games = +gamesStr;
+          const d = group[0]; // use first element to access category/team info
+          const count = group.length;
+          const maxCount = maxCountsBySubCategory[subCategory];
+          const xPos = x(subCategory) + x.bandwidth() / 2;
+          const yPos = y(games);
+
+          // Interpolate based on category
+
+          const powScale = d3
+            .scalePow()
+            .exponent(0.5) // try 0.4, 0.6, etc. for more/less exaggeration
+            .domain([1, maxCount])
+            .range([0.2, 1]); // avoid being too light with 0
+
+          const color =
+            d.category === "Drug Violations"
+              ? d3.interpolateReds(powScale(count))
+              : d3.interpolateBlues(powScale(count));
+
+          svg
+            .append("circle")
+            .attr("cx", xPos)
+            .attr("cy", yPos)
+            .attr("r", 7)
+            .attr("fill", color)
+
+            .on("mouseover", function (event) {
+              d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2);
+
+              const matches = filtered.filter(
+                (item) =>
+                  item.subCategory === d.subCategory && item.games === d.games
+              );
+
+              d3
+                .select("body")
+                .append("div")
+                .attr("class", "tooltip")
+                .style("left", `${event.pageX + 10}px`)
+                .style("top", `${event.pageY - 30}px`).html(`
+      <div class="tooltip-header">${d.subCategory}</div>
+      <div><strong>Games:</strong> ${d.games}</div>
+      <div><strong>Players:</strong> ${matches.length}</div>
+    `);
+            })
+            .on("mouseout", function () {
+              d3.select(this).attr("stroke", null);
+              d3.selectAll(".tooltip").remove(); // remove hover tooltip
+            })
+            .on("click", function (event) {
+              showTooltip(event, d, filtered);
+            });
+        });
       }
 
       function showTooltip(event, d, data) {
         d3.selectAll(".tooltip").remove();
 
-        // Get all players with same subCategory and game count
         const matches = data.filter(
           (item) => item.subCategory === d.subCategory && item.games === d.games
         );
@@ -301,25 +357,27 @@
           .style("left", `${event.pageX + 10}px`)
           .style("top", `${event.pageY - 30}px`);
 
-        // Header with close button
+        // Header with count
         tooltip.html(`
     <div class="tooltip-header">
       ${d.subCategory} (${d.games} game${d.games > 1 ? "s" : ""})
       <button class="close-btn" id="close-tooltip">&times;</button>
     </div>
+    <div style="margin-bottom: 10px;"><strong>Total players:</strong> ${
+      matches.length
+    }</div>
   `);
 
-        // Add each player as a card
+        // Add player cards
         matches.forEach((item) => {
           tooltip.append("div").attr("class", "player-card").html(`
-        <strong>${item.name}</strong>
-        <div><em>Team:</em> ${item.team}</div>
-        <div><em>Year:</em> ${item.year}</div>
-        <div><em>Description:</em> ${item.description}</div>
-      `);
+      <strong>${item.name}</strong>
+      <div><em>Team:</em> ${item.team}</div>
+      <div><em>Year:</em> ${item.year}</div>
+      <div><em>Description:</em> ${item.description}</div>
+    `);
         });
 
-        // X button to close the tooltip
         d3.select("#close-tooltip").on("click", () => tooltip.remove());
       }
 
