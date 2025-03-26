@@ -7,7 +7,7 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: 'Bebas Neue', sans-serif;
       margin: 0;
       padding: 20px;
       background: #f0f0f0;
@@ -44,6 +44,10 @@
       margin-bottom: 15px;
     }
 
+    circle {
+      transition: fill 0.3s ease, opacity 0.3s ease;
+    }
+
     .control-panel {
       display: flex;
       flex-wrap: wrap;
@@ -60,6 +64,15 @@
     .control-panel select {
       padding: 5px;
       font-size: 14px;
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+      transition: background-color 0.3s ease, border 0.3s ease;
+    }
+
+    .control-panel select:hover {
+      background-color: #e0e0e0;
+      border-color: #aaa;
     }
 
     .category-title {
@@ -365,7 +378,7 @@
         .attr("x", -height / 2)
         .attr("y", -150)
         .attr("text-anchor", "middle")
-        .attr("font-size", "14px")
+        .attr("font-size", "20px")
         .attr("transform", "rotate(-90)")
         .text("Violation Categories");
 
@@ -375,7 +388,7 @@
         .attr("x", width / 2)
         .attr("y", height + 50)
         .attr("text-anchor", "middle")
-        .attr("font-size", "14px")
+        .attr("font-size", "20px")
         .text("Number of Games Suspended");
 
       // Group data by (subCategory, games)
@@ -412,19 +425,22 @@
         const count = group.length;
         const xPos = x(games);
         const yPos = y(subCategory) + y.bandwidth() / 2;
+        // Change fill color based on subCategory
+        let fillColor = "blue"; // Default to blue
+        if (subCategory === "In-game violence" || subCategory === "Personal conduct") {
+          fillColor = "red"; // Set to red for these subCategories
+        }
 
         svg
           .append("circle")
           .attr("cx", xPos)
           .attr("cy", yPos)
           .attr("r", sizeScale(count))
-          .attr("fill", "orange")
-          .attr("opacity", 0.7)
+          .attr("fill", fillColor)
+          .attr("opacity", 0.5)
           .on("mouseover", function (event) {
-            d3.select(this)
-              .attr("stroke", "#FFB612")
-              .attr("stroke-width", 2)
-              .attr("fill", "red");
+            d3.select(this).attr("opacity", 0.8)
+              .style("cursor", "pointer");
             d3.selectAll(".hover-tooltip").remove();
 
             const matches = filtered.filter(
@@ -437,15 +453,17 @@
               .append("div")
               .attr("class", "tooltip hover-tooltip")
               .style("left", `${event.pageX + 10}px`)
-              .style("top", `${event.pageY - 30}px`).html(`
-                        <div class="preview-header">${d.subCategory}</div>
-                        <div><strong>Games Suspended:</strong> ${d.games === 40 ? "Indefinite" : d.games
-                }</div>
-                        <div><strong>Players:</strong> ${matches.length}</div>
+              .style("top", `${event.pageY - 30}px`)
+              //https://stackoverflow.com/questions/67344056/how-does-the-html-d3-js-method-function-in-this-example#:~:text=If%20it%20is%20passed%20a%20value%2C%20it%20simply%20sets%20the%20innerHTML%20of%20the%20element(s)%20to%20that%20value
+              .html(`
+                      <div><strong>Violation Type:</strong> ${d.subCategory}</div>
+                      <div><strong>Games Suspended:</strong> ${d.games === 40 ? "Indefinite" : d.games}</div>
+                      <div><strong>Number of Players:</strong> ${matches.length}</div>
+                      <p><i>Click Circle To See Players</i></p>
                     `);
           })
           .on("mouseout", function () {
-            d3.select(this).attr("stroke", null).attr("fill", "orange");
+            d3.select(this).attr("opacity", 0.5)
             d3.selectAll(".hover-tooltip").remove();
           })
           .on("click", function (event) {
@@ -471,13 +489,10 @@
       // Header with count
       tooltip.html(`
         <div class="tooltip-header">
-          ${d.subCategory} (${d.games === 40 ? "Indef." : d.games} ${d.games === 1 ? "game" : "games"
-        })
-
+          ${d.subCategory} (${d.games === 40 ? "Indef." : d.games} ${d.games === 1 ? "game" : "games"})
           <button class="close-btn" id="close-tooltip">&times;</button>
         </div>
-        <div style="margin-bottom: 10px;"><strong>Total players:</strong> ${matches.length
-        }</div>
+        <div style="margin-bottom: 10px;"><strong>Total players:</strong> ${matches.length}</div>
       `);
 
       // Add player cards
