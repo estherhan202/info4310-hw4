@@ -29,6 +29,13 @@
       margin-bottom: 0;
     }
 
+    #visualization {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+
     .grid line {
       stroke: #ccc;
       stroke-opacity: 0.7;
@@ -48,7 +55,7 @@
       transition: fill 0.3s ease, opacity 0.3s ease;
     }
 
-    .control-panel {
+    .filters {
       display: flex;
       flex-wrap: wrap;
       gap: 15px;
@@ -56,12 +63,12 @@
       margin-bottom: 20px;
     }
 
-    .control-panel label {
+    .filters label {
       font-weight: bold;
       margin-right: 5px;
     }
 
-    .control-panel select {
+    .filters select {
       padding: 5px;
       font-size: 14px;
       border: 1px solid #ccc;
@@ -70,24 +77,12 @@
       transition: background-color 0.3s ease, border 0.3s ease;
     }
 
-    .control-panel select:hover {
+    .filters select:hover {
       background-color: #e0e0e0;
       border-color: #aaa;
     }
 
-    .category-title {
-      font-style: italic;
-      font-size: medium;
-    }
-
-    #visualization {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-    }
-
-    .tooltip {
+    .summary {
       position: absolute;
       pointer-events: auto;
       background: white;
@@ -103,7 +98,7 @@
       transition: all 0.3s ease;
     }
 
-    .tooltip-header {
+    .summary-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -115,19 +110,7 @@
       padding-bottom: 5px;
     }
 
-    .preview-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: bold;
-      margin-bottom: 10px;
-      font-size: 16px;
-      color: #013369;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 5px;
-    }
-
-    .tooltip .close-btn {
+    .summary .close-btn {
       background: none;
       border: none;
       font-size: 18px;
@@ -136,13 +119,32 @@
       cursor: pointer;
     }
 
+    #cards {
+      display: flex;
+      flex-direction: row;
+      justify-content: flex-start;
+      gap: 20px;
+      padding-bottom: 20px;
+    }
+
     .player-card {
+      display: block;
+      max-width: 30px;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
       padding: 10px;
       margin-bottom: 10px;
       background-color: #f9f9f9;
       transition: background-color 0.3s ease;
+      min-width: 200px;
+      /* Set a minimum width for each card */
+    }
+
+    .player-cards-container {
+      display: flex;
+      flex-direction: row;
+      overflow-x: auto;
+      max-width: 1200px;
     }
 
     .player-card:hover {
@@ -193,7 +195,7 @@
       number of players suspended for the same offense and game count.
     </div>
 
-    <div class="control-panel" id="filters">
+    <div class="filters" id="filters">
       <div>
         <label for="year-filter">Year Range:</label>
         <select id="year-filter">
@@ -223,12 +225,14 @@
       </div>
     </div>
     <div id="visualization"></div>
+
+    <div id="cards"></div>
   </div>
 
   <script>
     const width = 900;
     const height = 350;
-    const margin = { top: 60, right: 40, bottom: 140, left: 200 };
+    const margin = { top: 20, right: 40, bottom: 60, left: 200 };
 
     const svg = d3
       .select("#visualization")
@@ -441,7 +445,7 @@
           .on("mouseover", function (event) {
             d3.select(this).attr("opacity", 0.8)
               .style("cursor", "pointer");
-            d3.selectAll(".hover-tooltip").remove();
+            d3.selectAll(".hover-summary").remove();
 
             const matches = filtered.filter(
               (item) =>
@@ -451,7 +455,7 @@
             d3
               .select("body")
               .append("div")
-              .attr("class", "tooltip hover-tooltip")
+              .attr("class", "summary hover-summary")
               .style("left", `${event.pageX + 10}px`)
               .style("top", `${event.pageY - 30}px`)
               //https://stackoverflow.com/questions/67344056/how-does-the-html-d3-js-method-function-in-this-example#:~:text=If%20it%20is%20passed%20a%20value%2C%20it%20simply%20sets%20the%20innerHTML%20of%20the%20element(s)%20to%20that%20value
@@ -464,52 +468,63 @@
           })
           .on("mouseout", function () {
             d3.select(this).attr("opacity", 0.5)
-            d3.selectAll(".hover-tooltip").remove();
+            d3.selectAll(".hover-summary").remove();
           })
           .on("click", function (event) {
-            showTooltip(event, d, filtered);
+            showPlayers(event, d, filtered);
           });
       });
     }
 
-    function showTooltip(event, d, data) {
-      d3.selectAll(".tooltip").remove();
+    function showPlayers(event, d, data) {
+      d3.selectAll(".summary").remove();
 
       const matches = data.filter(
         (item) => item.subCategory === d.subCategory && item.games === d.games
       );
 
-      const tooltip = d3
-        .select("body")
-        .append("div")
-        .attr("class", "tooltip click-tooltip")
-        .style("left", `${event.pageX + 10}px`)
-        .style("top", `${event.pageY - 30}px`);
+      const playerCard = d3
+        .select("#cards")
+        .append("div");
+
+      playerCard.select(".close-btn")
+        .on("click", function () {
+          d3.select(".hover-summary").remove() // Remove summary on close button click
+        });
+
+      // Create a wrapper for header and number of players
+      const headerWrapper = playerCard.append("div").attr("class", "header-wrapper");
 
       // Header with count
-      tooltip.html(`
-        <div class="tooltip-header">
-          ${d.subCategory} (${d.games === 40 ? "Indef." : d.games} ${d.games === 1 ? "game" : "games"})
-          <button class="close-btn" id="close-tooltip">&times;</button>
-        </div>
-        <div style="margin-bottom: 10px;"><strong>Total players:</strong> ${matches.length}</div>
-      `);
+      headerWrapper.html(`
+    <div class="player-card-header">
+      ${d.subCategory} (${d.games === 40 ? "Indef." : d.games} ${d.games === 1 ? "game" : "games"})
+      <button class="close-btn" id="close-player-card">&times;</button>
+    </div>
+    <div class="number-players" style="margin-bottom: 10px;">
+      <strong>Total players:</strong> ${matches.length}
+    </div>
+  `);
+
+      // Create a new div for player cards
+      const playerCardsContainer = playerCard.append("div").attr("class", "player-cards-container");
 
       // Add player cards
       matches.forEach((item) => {
-        console.log(item);
-        tooltip.append("div").attr("class", "player-card").html(`
-          <strong>${item.name}</strong>
-          <div><em>Team:</em> ${item.team}</div>
-          <div><em>Year:</em> ${item.year}</div>
-          <div><em>Description:</em> ${item.description}</div>
-          <div><em>Source:</em> <a href="${item.source}" target="_blank">${item.source}</a></div>
-        `);
+        playerCardsContainer.append("div")
+          .attr("class", "player-card")
+          .html(`
+        <strong>${item.name}</strong>
+        <div><em>Team:</em> ${item.team}</div>
+        <div><em>Year:</em> ${item.year}</div>
+        <div><em>Description:</em> ${item.description}</div>
+        <div><em>Source:</em> <a href="${item.source}" target="_blank">${item.source}</a></div>
+      `);
       });
 
       // Close button inside the tooltip
-      d3.select("#close-tooltip").on("click", () => {
-        tooltip.remove();
+      d3.select("#close-player-card").on("click", () => {
+        playerCard.remove();
         document.removeEventListener("click", outsideClickListener);
       });
 
@@ -519,15 +534,14 @@
       }, 0);
 
       function outsideClickListener(event) {
-        const isInside = tooltip.node().contains(event.target);
+        const isInside = playerCard.node().contains(event.target);
         if (!isInside) {
-          tooltip.remove();
+          playerCard.remove();
           document.removeEventListener("click", outsideClickListener);
         }
       }
     }
 
-    // Event listeners
     d3.selectAll("select").on("change", () => updateVis(originalData));
   </script>
 </body>
