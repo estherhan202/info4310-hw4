@@ -29,6 +29,12 @@
       margin-bottom: 0;
     }
 
+    .grid line {
+      stroke: #ccc;
+      stroke-opacity: 0.7;
+      shape-rendering: crispEdges;
+    }
+
     .subtitle {
       text-align: center;
       font-style: italic;
@@ -52,51 +58,6 @@
     .control-panel select {
       padding: 5px;
       font-size: 14px;
-    }
-
-    .gradient-legend {
-      display: flex;
-      justify-content: center;
-      flex-direction: column;
-      right: 200px;
-      padding: 15px;
-      position: absolute;
-      gap: 15px;
-      margin-bottom: 20px;
-      margin-top: 20px;
-      border-style: solid;
-      border-color: #939393;
-    }
-
-    /* Rest of the existing styles remain the same */
-    .legend-section {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .gradient-container {
-      width: 150px;
-      height: 15px;
-      border: 1px solid #ccc;
-      border-radius: 10px;
-    }
-
-    .drug-gradient {
-      background: linear-gradient(to right, #fca5a5, #b91c1c);
-    }
-
-    .conduct-gradient {
-      background: linear-gradient(to right, #93c5fd, #1e3a8a);
-    }
-
-    .legend-text {
-      display: flex;
-      justify-content: space-between;
-      width: 200px;
-      font-size: 12px;
-      color: #666;
     }
 
     .category-title {
@@ -243,26 +204,6 @@
         </select>
       </div>
     </div>
-
-    <div class="gradient-legend">
-      <div class="legend-section">
-        <div class="category-title">Drug Violations</div>
-        <div class="gradient-container drug-gradient"></div>
-        <div class="legend-text">
-          <span>1-2 Players</span>
-          <span>10+ Players</span>
-        </div>
-      </div>
-      <div class="legend-section">
-        <div class="category-title">Conduct Violations</div>
-        <div class="gradient-container conduct-gradient"></div>
-        <div class="legend-text">
-          <span>1-2 Players</span>
-          <span>10+ Players</span>
-        </div>
-      </div>
-    </div>
-
     <div id="visualization"></div>
   </div>
 
@@ -378,12 +319,15 @@
       const maxGameInFiltered = d3.max(filtered, (d) => d.games);
       const includeIndef = filtered.some((d) => d.games === 40);
       const yMax = includeIndef ? 40 : Math.ceil(maxGameInFiltered / 10) * 10;
-      const x = d3.scaleLinear().domain([0, yMax]).range([0, width]); // horizontal range
+      const x = d3.scaleLog().domain([1, yMax]).range([20, width]); // horizontal range
 
       svg
         .append("g")
         .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x));
+        .call(d3.axisBottom(x).ticks(5).tickFormat((d, i, n) => {
+          // Check if it's the maximum value, and replace it with "40+"
+          return d === 40 ? "40+" : d;
+        }))
 
       const xAxis = d3
         .axisLeft(y)
@@ -391,6 +335,7 @@
         .tickFormat((d) => (d === 40 ? "Indef." : d));
 
       svg.append("g").call(d3.axisLeft(y));
+
 
       // Y-axis label
       svg
@@ -410,6 +355,7 @@
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
         .text("Number of Games Suspended");
+
 
       // Group data by (subCategory, games)
       const groupMap = new Map();
