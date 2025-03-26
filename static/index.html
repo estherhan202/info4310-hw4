@@ -314,10 +314,22 @@
       svg.selectAll("*").remove();
 
       const filtered = applyFilters(data);
+      const subCategoryOrder = [
+        "In-game violence",
+        "Personal conduct",
+        "PEDs",
+        "PEDs, more than once",
+        "Substance abuse",
+        "Substance abuse, more than once",
+      ];
 
       const y = d3
         .scaleBand()
-        .domain([...new Set(filtered.map((d) => d.subCategory))])
+        .domain(
+          subCategoryOrder.filter((cat) =>
+            filtered.some((d) => d.subCategory === cat)
+          )
+        )
         .range([0, height])
         .padding(0.3);
 
@@ -329,9 +341,15 @@
       svg
         .append("g")
         .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x).ticks(5).tickFormat((d, i, n) => {
-          return d === 40 ? "40+" : d;
-        }))
+        .call(
+          d3
+            .axisBottom(x)
+            .ticks(5)
+            .tickFormat((d, i, n) => {
+              // Check if it's the maximum value, and replace it with "40+"
+              return d === 40 ? "40+" : d;
+            })
+        );
 
       const xAxis = d3
         .axisLeft(y)
@@ -359,7 +377,6 @@
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
         .text("Number of Games Suspended");
-
 
       // Group data by (subCategory, games)
       const groupMap = new Map();
@@ -396,14 +413,18 @@
         const xPos = x(games);
         const yPos = y(subCategory) + y.bandwidth() / 2;
 
-        svg.append("circle")
+        svg
+          .append("circle")
           .attr("cx", xPos)
           .attr("cy", yPos)
           .attr("r", sizeScale(count))
           .attr("fill", "orange")
           .attr("opacity", 0.7)
           .on("mouseover", function (event) {
-            d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2).attr("fill", "red");
+            d3.select(this)
+              .attr("stroke", "#FFB612")
+              .attr("stroke-width", 2)
+              .attr("fill", "red");
             d3.selectAll(".hover-tooltip").remove();
 
             const matches = filtered.filter(
