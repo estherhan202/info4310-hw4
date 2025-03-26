@@ -54,6 +54,55 @@
       font-size: 14px;
     }
 
+    .gradient-legend {
+      display: flex;
+      justify-content: center;
+      flex-direction: column;
+      right: 200px;
+      padding: 15px;
+      position: absolute;
+      gap: 15px;
+      margin-bottom: 20px;
+      margin-top: 20px;
+      border-style: solid;
+      border-color: #939393;
+    }
+
+    /* Rest of the existing styles remain the same */
+    .legend-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .gradient-container {
+      width: 150px;
+      height: 15px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+
+    .drug-gradient {
+      background: linear-gradient(to right, #fca5a5, #b91c1c);
+    }
+
+    .conduct-gradient {
+      background: linear-gradient(to right, #93c5fd, #1e3a8a);
+    }
+
+    .legend-text {
+      display: flex;
+      justify-content: space-between;
+      width: 200px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .category-title {
+      font-style: italic;
+      font-size: medium;
+    }
 
     #visualization {
       display: flex;
@@ -195,6 +244,25 @@
       </div>
     </div>
 
+    <div class="gradient-legend">
+      <div class="legend-section">
+        <div class="category-title">Drug Violations</div>
+        <div class="gradient-container drug-gradient"></div>
+        <div class="legend-text">
+          <span>1-2 Players</span>
+          <span>10+ Players</span>
+        </div>
+      </div>
+      <div class="legend-section">
+        <div class="category-title">Conduct Violations</div>
+        <div class="gradient-container conduct-gradient"></div>
+        <div class="legend-text">
+          <span>1-2 Players</span>
+          <span>10+ Players</span>
+        </div>
+      </div>
+    </div>
+
     <div id="visualization"></div>
   </div>
 
@@ -301,51 +369,51 @@
 
       const filtered = applyFilters(data);
 
-      const x = d3
+      const y = d3
         .scaleBand()
-        .domain([...new Set(filtered.map(d => d.subCategory))])
-        .range([0, width])
+        .domain([...new Set(filtered.map((d) => d.subCategory))])
+        .range([0, height]) // correct vertical range
         .padding(0.3);
 
-      const maxGameInFiltered = d3.max(filtered, d => d.games);
-      const includeIndef = filtered.some(d => d.games === 40);
+      const maxGameInFiltered = d3.max(filtered, (d) => d.games);
+      const includeIndef = filtered.some((d) => d.games === 40);
       const yMax = includeIndef ? 40 : Math.ceil(maxGameInFiltered / 10) * 10;
+      const x = d3.scaleLinear().domain([0, yMax]).range([0, width]); // horizontal range
 
-      const y = d3.scaleLog().domain([1, yMax]).range([height, 0]);
-
-      svg.append("g")
+      svg
+        .append("g")
         .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x))
-        .selectAll("text")
-        .attr("transform", "rotate(-40)")
-        .style("text-anchor", "end");
+        .call(d3.axisBottom(x));
 
-      const yAxis = d3.axisLeft(y)
+      const xAxis = d3
+        .axisLeft(y)
         .tickValues(d3.range(0, yMax + 1, 5))
-        .tickFormat(d => (d === 40 ? "Indef." : d));
+        .tickFormat((d) => (d === 40 ? "Indef." : d));
 
-      svg.append("g").call(yAxis);
+      svg.append("g").call(d3.axisLeft(y));
 
       // Y-axis label
-      svg.append("text")
-        .attr("transform", `rotate(-90)`)
+      svg
+        .append("text")
         .attr("x", -height / 2)
         .attr("y", -50)
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
-        .text("Number of Games Suspended");
+        .attr("transform", "rotate(-90)")
+        .text("Violation Categories");
 
       // X-axis label
-      svg.append("text")
+      svg
+        .append("text")
         .attr("x", width / 2)
-        .attr("y", height + 90)
+        .attr("y", height + 50)
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
-        .text("Violation Categories");
+        .text("Number of Games Suspended");
 
       // Group data by (subCategory, games)
       const groupMap = new Map();
-      filtered.forEach(d => {
+      filtered.forEach((d) => {
         const key = `${d.subCategory}|${d.games}`;
         if (!groupMap.has(key)) groupMap.set(key, []);
         groupMap.get(key).push(d);
@@ -355,23 +423,28 @@
       const maxCountsBySubCategory = {};
       groupMap.forEach((group, key) => {
         const [subCategory] = key.split("|");
-        if (!maxCountsBySubCategory[subCategory] || group.length > maxCountsBySubCategory[subCategory]) {
+        if (
+          !maxCountsBySubCategory[subCategory] ||
+          group.length > maxCountsBySubCategory[subCategory]
+        ) {
           maxCountsBySubCategory[subCategory] = group.length;
         }
       });
 
       // Log scale for circle size
-      const sizeScale = d3.scaleLog()
-        .domain([1, d3.max([...groupMap.values()].map(g => g.length))])
+      const sizeScale = d3
+        .scaleLog()
+        .domain([1, d3.max([...groupMap.values()].map((g) => g.length))])
         .range([5, 20]);
 
+      // Draw circles
       groupMap.forEach((group, key) => {
         const [subCategory, gamesStr] = key.split("|");
         const games = +gamesStr;
-        const d = group[0];
+        const d = group[0]; // Use first element for category/team info
         const count = group.length;
-        const xPos = x(subCategory) + x.bandwidth() / 2;
-        const yPos = y(games);
+        const xPos = x(games);
+        const yPos = y(subCategory) + y.bandwidth() / 2;
 
         svg.append("circle")
           .attr("cx", xPos)
@@ -383,15 +456,20 @@
             d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2).attr("fill", "red");
             d3.selectAll(".hover-tooltip").remove();
 
-            const matches = filtered.filter(item => item.subCategory === d.subCategory && item.games === d.games);
+            const matches = filtered.filter(
+              (item) =>
+                item.subCategory === d.subCategory && item.games === d.games
+            );
 
-            d3.select("body").append("div")
+            d3
+              .select("body")
+              .append("div")
               .attr("class", "tooltip hover-tooltip")
               .style("left", `${event.pageX + 10}px`)
-              .style("top", `${event.pageY - 30}px`)
-              .html(`
+              .style("top", `${event.pageY - 30}px`).html(`
                         <div class="preview-header">${d.subCategory}</div>
-                        <div><strong>Games Suspended:</strong> ${d.games === 40 ? "Indefinite" : d.games}</div>
+                        <div><strong>Games Suspended:</strong> ${d.games === 40 ? "Indefinite" : d.games
+                }</div>
                         <div><strong>Players:</strong> ${matches.length}</div>
                     `);
           })
