@@ -36,6 +36,8 @@
     }
 
     .subtitle {
+      padding-top: 20px;
+      padding-bottom: 20px;
       text-align: center;
       font-style: italic;
       color: #4f5155;
@@ -172,7 +174,10 @@
   <div id="container">
     <h1>NFL Suspensions: Punishment Severity vs. Offense Type</h1>
     <div class="subtitle">
-      Analyzing how different violations are penalized across the league
+      This visualization explores the severity of suspensions across the league for different violations. <br>Each
+      offense
+      can result in players being suspended for a varying number of games. <br><br>Larger circles indicate a higher
+      number of players suspended for the same offense and game count.
     </div>
 
     <div class="control-panel" id="filters">
@@ -210,7 +215,7 @@
   <script>
     const width = 900;
     const height = 350;
-    const margin = { top: 60, right: 40, bottom: 140, left: 70 };
+    const margin = { top: 60, right: 40, bottom: 140, left: 200 };
 
     const svg = d3
       .select("#visualization")
@@ -313,19 +318,18 @@
       const y = d3
         .scaleBand()
         .domain([...new Set(filtered.map((d) => d.subCategory))])
-        .range([0, height]) // correct vertical range
+        .range([0, height])
         .padding(0.3);
 
       const maxGameInFiltered = d3.max(filtered, (d) => d.games);
       const includeIndef = filtered.some((d) => d.games === 40);
       const yMax = includeIndef ? 40 : Math.ceil(maxGameInFiltered / 10) * 10;
-      const x = d3.scaleLog().domain([1, yMax]).range([20, width]); // horizontal range
+      const x = d3.scaleLog().domain([1, yMax]).range([20, width]);
 
       svg
         .append("g")
         .attr("transform", `translate(0,${height})`)
         .call(d3.axisBottom(x).ticks(5).tickFormat((d, i, n) => {
-          // Check if it's the maximum value, and replace it with "40+"
           return d === 40 ? "40+" : d;
         }))
 
@@ -341,7 +345,7 @@
       svg
         .append("text")
         .attr("x", -height / 2)
-        .attr("y", -50)
+        .attr("y", -150)
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
         .attr("transform", "rotate(-90)")
