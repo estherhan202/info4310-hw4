@@ -371,34 +371,31 @@
 
       const x = d3
         .scaleBand()
-        .domain([...new Set(filtered.map((d) => d.subCategory))])
+        .domain([...new Set(filtered.map(d => d.subCategory))])
         .range([0, width])
         .padding(0.3);
 
-      const maxGameInFiltered = d3.max(filtered, (d) => d.games);
-      const includeIndef = filtered.some((d) => d.games === 40);
+      const maxGameInFiltered = d3.max(filtered, d => d.games);
+      const includeIndef = filtered.some(d => d.games === 40);
       const yMax = includeIndef ? 40 : Math.ceil(maxGameInFiltered / 10) * 10;
 
       const y = d3.scaleLinear().domain([0, yMax]).range([height, 0]);
 
-      svg
-        .append("g")
+      svg.append("g")
         .attr("transform", `translate(0,${height})`)
         .call(d3.axisBottom(x))
         .selectAll("text")
         .attr("transform", "rotate(-40)")
         .style("text-anchor", "end");
 
-      const yAxis = d3
-        .axisLeft(y)
+      const yAxis = d3.axisLeft(y)
         .tickValues(d3.range(0, yMax + 1, 5))
-        .tickFormat((d) => (d === 40 ? "Indef." : d));
+        .tickFormat(d => (d === 40 ? "Indef." : d));
 
       svg.append("g").call(yAxis);
 
       // Y-axis label
-      svg
-        .append("text")
+      svg.append("text")
         .attr("transform", `rotate(-90)`)
         .attr("x", -height / 2)
         .attr("y", -50)
@@ -407,92 +404,70 @@
         .text("Number of Games Suspended");
 
       // X-axis label
-      svg
-        .append("text")
+      svg.append("text")
         .attr("x", width / 2)
         .attr("y", height + 90)
         .attr("text-anchor", "middle")
         .attr("font-size", "14px")
         .text("Violation Categories");
 
-      // Step 1: Group by (subCategory, games)
+      // Group data by (subCategory, games)
       const groupMap = new Map();
-      filtered.forEach((d) => {
+      filtered.forEach(d => {
         const key = `${d.subCategory}|${d.games}`;
         if (!groupMap.has(key)) groupMap.set(key, []);
         groupMap.get(key).push(d);
       });
 
-      // Step 2: Find max count per subCategory
+      // Find max count per subCategory
       const maxCountsBySubCategory = {};
       groupMap.forEach((group, key) => {
         const [subCategory] = key.split("|");
-        if (
-          !maxCountsBySubCategory[subCategory] ||
-          group.length > maxCountsBySubCategory[subCategory]
-        ) {
+        if (!maxCountsBySubCategory[subCategory] || group.length > maxCountsBySubCategory[subCategory]) {
           maxCountsBySubCategory[subCategory] = group.length;
         }
       });
 
-      // Step 3: Draw one circle per group with hue based on count (relative to subCategory)
+      // Log scale for circle size
+      const sizeScale = d3.scaleLog()
+        .domain([1, d3.max([...groupMap.values()].map(g => g.length))])
+        .range([5, 20]);
+
+      // Draw circles
       groupMap.forEach((group, key) => {
         const [subCategory, gamesStr] = key.split("|");
         const games = +gamesStr;
-        const d = group[0]; // use first element to access category/team info
+        const d = group[0]; // Use first element for category/team info
         const count = group.length;
-        const maxCount = maxCountsBySubCategory[subCategory];
         const xPos = x(subCategory) + x.bandwidth() / 2;
         const yPos = y(games);
 
-        // Interpolate based on category
-
-        const powScale = d3
-          .scalePow()
-          .exponent(0.5) // try 0.4, 0.6, etc. for more/less exaggeration
-          .domain([1, maxCount])
-          .range([0.2, 1]); // avoid being too light with 0
-
-        const color =
-          d.category === "Drug Violations"
-            ? d3.interpolateReds(powScale(count))
-            : d3.interpolateBlues(powScale(count));
-
-        svg
-          .append("circle")
+        svg.append("circle")
           .attr("cx", xPos)
           .attr("cy", yPos)
-          .attr("r", 7)
-          .attr("fill", color)
+          .attr("r", sizeScale(count))
+          .attr("fill", "#013369")
+          .attr("opacity", 0.7)
           .on("mouseover", function (event) {
             d3.select(this).attr("stroke", "#FFB612").attr("stroke-width", 2);
-
-            // Remove any existing hover tooltip
             d3.selectAll(".hover-tooltip").remove();
 
-            const matches = filtered.filter(
-              (item) =>
-                item.subCategory === d.subCategory && item.games === d.games
-            );
+            const matches = filtered.filter(item => item.subCategory === d.subCategory && item.games === d.games);
 
-            d3
-              .select("body")
-              .append("div")
+            d3.select("body").append("div")
               .attr("class", "tooltip hover-tooltip")
               .style("left", `${event.pageX + 10}px`)
-              .style("top", `${event.pageY - 30}px`).html(`
-          <div class="preview-header">${d.subCategory}</div>
-          <div><strong>Games Suspended:</strong> ${d.games === 40 ? "Indefinite" : d.games
-                }</div>
-
-          <div><strong>Players:</strong> ${matches.length}</div>
-        `);
+              .style("top", `${event.pageY - 30}px`)
+              .html(`
+                        <div class="preview-header">${d.subCategory}</div>
+                        <div><strong>Games Suspended:</strong> ${d.games === 40 ? "Indefinite" : d.games}</div>
+                        <div><strong>Players:</strong> ${matches.length}</div>
+                    `);
           })
           .on("mouseout", function () {
             d3.select(this).attr("stroke", null);
             d3.selectAll(".hover-tooltip").remove();
           })
-
           .on("click", function (event) {
             showTooltip(event, d, filtered);
           });
